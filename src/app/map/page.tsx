@@ -119,6 +119,7 @@ function MapContent() {
     const filters: Record<string, any> = {};
     if (drillDown.region) filters.region = drillDown.region;
     if (drillDown.province) filters.province = drillDown.province;
+    if (drillDown.municipality) filters.municipality = drillDown.municipality;
 
     const hasFilters = Object.keys(filters).length > 0;
     if (hasFilters) {
@@ -131,7 +132,7 @@ function MapContent() {
       });
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [isReady, drillDown.region, drillDown.province]);
+  }, [isReady, drillDown.region, drillDown.province, drillDown.municipality]);
 
   // --- Load barangays geojson when municipality selected --------
   useEffect(() => {

@@ -121,6 +121,15 @@ self.onmessage = function (e) {
         return true;
       });
 
+      if (filters.municipality) {
+        const muniLower = filters.municipality.toLowerCase().trim();
+        currentFeatures = currentFeatures.filter((f: any) => {
+          const p = f.properties;
+          const title = (p.n || '').toLowerCase();
+          return title.includes(muniLower);
+        });
+      }
+
       if (supercluster) {
         supercluster.load(currentFeatures);
       }
