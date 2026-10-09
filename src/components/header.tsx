@@ -18,28 +18,12 @@ export function Header() {
           />
         </Link>
 
-        {/* Middle: Navigation Links */}
+        {/* Right: Navigation Links */}
         <nav className="flex items-center gap-6 sm:gap-8 text-sm font-bold text-[#01367d]">
-          <Link href="/" className="hover:text-[#ffb241] transition-colors whitespace-nowrap">
-            Home
-          </Link>
-          <Link href="/map" className="hover:text-[#ffb241] transition-colors whitespace-nowrap">
-            Interactive Map
-          </Link>
           <Link href="/contractors" className="hover:text-[#ffb241] transition-colors whitespace-nowrap">
             Contractors
           </Link>
         </nav>
-
-        {/* Right: Map Quick Action CTA */}
-        <div className="flex items-center gap-3">
-          <Link
-            href="/map"
-            className="hidden sm:inline-flex items-center gap-2 rounded-full bg-[#01367d] px-5 py-2 text-xs font-black text-white hover:bg-[#ffb241] hover:text-[#011438] transition-all shadow-sm"
-          >
-            Launch Map &rarr;
-          </Link>
-        </div>
       </div>
     </header>
   );
