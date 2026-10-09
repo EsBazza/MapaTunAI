@@ -1,6 +1,6 @@
-# 🇵🇭 PhilTrace Application
+# MapaTunAI
 
-AI-Powered National Public Infrastructure Transparency Platform ("The Google Maps for Philippine Public Works").
+AI-Powered National Public Infrastructure Transparency Platform.
 
 For the complete, comprehensive technical documentation, data models, forensic algorithms, full 26-endpoint API reference, and developer runbooks, see:
 👉 **[PHILTRACE_DOCUMENTATION.md](../PHILTRACE_DOCUMENTATION.md)**
