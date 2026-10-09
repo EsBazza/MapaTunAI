@@ -1,0 +1,291 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider  = "postgresql"
+  url       = env("DATABASE_URL")
+  directUrl = env("DIRECT_URL")
+}
+
+// ─── Enums ──────────────────────────────────────────────────
+
+enum ExtractionStatus {
+  PENDING
+  PARSED
+  FAILED
+}
+
+enum ConnectionType {
+  NEWS_MENTION
+  SHARED_ADDRESS
+  CONGRESS_RECORD
+}
+
+enum Confidence {
+  REPORTED
+  UNCONFIRMED
+}
+
+// ─── Geographic Models ──────────────────────────────────────
+
+model Region {
+  id         String     @id @default(cuid())
+  psgcCode   String     @unique
+  name       String     @unique
+  provinces  Province[]
+}
+
+model Province {
+  id        String    @id @default(cuid())
+  psgcCode  String    @unique
+  name      String
+  regionId  String
+  region    Region    @relation(fields: [regionId], references: [id])
+  projects  Project[]
+  @@unique([name, regionId])
+}
+
+// ─── Core Project Model ─────────────────────────────────────
+
+model Project {
+  id                 String            @id
+  name               String
+  provinceId         String
+  province           Province          @relation(fields: [provinceId], references: [id])
+  gpsLat             Float
+  gpsLng             Float
+  budgetPHP          Float
+  amountPaid         Float             @default(0)
+  progress           Float             @default(0)
+  startDate          DateTime
+  completionDate     DateTime?
+  status             String
+  category           String
+  contractorRaw      String
+  sourceOfFunds      String?
+  programName        String?
+  infraYear          String?
+  hasSatelliteImage  Boolean           @default(false)
+  reportCount        Int               @default(0)
+  avgRating          Float             @default(0)
+  reviewCount        Int               @default(0)
+  flagStalled        Boolean           @default(false)
+  flagNeverStarted   Boolean           @default(false)
+  flagOverdue        Boolean           @default(false)
+  flagPaymentPending Boolean           @default(false)
+  flagOverpaid       Boolean           @default(false)
+  lastActivityAt     DateTime?
+  aiSummary          String?
+  syncSource         String?
+  isLive             Boolean           @default(false)
+  livestreamUrl      String?
+  comments           Comment[]
+  reviews            Review[]
+  contractDocument   ContractDocument?
+  newsArticles       NewsArticle[]
+  updatedAt          DateTime          @updatedAt
+
+  @@index([provinceId])
+  @@index([gpsLat, gpsLng])
+  @@index([status])
+  @@index([category])
+  @@index([budgetPHP])
+  @@index([flagOverdue, flagOverpaid, flagStalled, flagNeverStarted])
+}
+
+// ─── Citizen Engagement Models ──────────────────────────────
+
+model Review {
+  id               String   @id @default(cuid())
+  projectId        String
+  project          Project  @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  rating           Float    // 1.0 to 5.0
+  progressRating   Float?   // Physical progress perception (0 - 100)
+  qualityRating    Float?   // 1 - 5 stars
+  workersActive    Boolean? // Active vs Abandoned
+  comment          String
+  photoUrl         String?
+  phoneHash        String   // SHA-256 hashed phone number
+  phoneVerified    Boolean  @default(false)
+  userLat          Float?   // Reviewer GPS Latitude at submission
+  userLng          Float?   // Reviewer GPS Longitude at submission
+  distanceKm       Float?   // Calculated distance from project site in KM
+  corroborations   Int      @default(0)
+  createdAt        DateTime @default(now())
+
+  @@unique([projectId, phoneHash])
+  @@index([projectId])
+  @@index([rating])
+}
+
+model Comment {
+  id                 String   @id @default(cuid())
+  projectId          String
+  project            Project  @relation(fields: [projectId], references: [id])
+  text               String
+  severity           String
+  rationale          String
+  phoneVerified      Boolean  @default(false)
+  corroborationCount Int      @default(0)
+  photoUrl           String?
+  createdAt          DateTime @default(now())
+}
+
+// ─── Contractor Models ──────────────────────────────────────
+
+model Contractor {
+  id              String                @id @default(cuid())
+  name            String                @unique
+  totalContracts  Int                   @default(0)
+  totalValuePHP   Float                 @default(0)
+  avgProgress     Float                 @default(0)
+  overdueCount    Int                   @default(0)
+  terminatedCount Int                   @default(0)
+  connections     ContractorConnection[]
+}
+
+// ─── Contract Document & BOQ Models ─────────────────────────
+
+model ContractDocument {
+  id                   String            @id @default(cuid())
+  projectId            String            @unique
+  project              Project           @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  sourcePdfUrl         String
+  contractAgreementUrl String?
+  noticeToProceedUrl   String?
+  noticeOfAwardUrl     String?
+  advertisementUrl     String?
+  biddersJson          String?
+  contractorLegalName  String?
+  contractorAddress    String?
+  authorizedOfficer    String?
+  tinNumber            String?
+  contractDurationDays Int?
+  extractionStatus     ExtractionStatus  @default(PENDING)
+  parsedAt             DateTime?
+  billOfQuantities     BillOfQuantity[]
+  engineerSignature    EngineerSignature?
+
+  @@index([extractionStatus])
+}
+
+model BillOfQuantity {
+  id            String           @id @default(cuid())
+  contractDocId String
+  contractDoc   ContractDocument @relation(fields: [contractDocId], references: [id], onDelete: Cascade)
+  itemCode      String
+  description   String
+  quantity      Float
+  unit          String
+  unitCostPhp   Float
+  totalPhp      Float
+
+  @@index([itemCode])
+  @@index([contractDocId])
+}
+
+model EngineerSignature {
+  id            String           @id @default(cuid())
+  contractDocId String           @unique
+  contractDoc   ContractDocument @relation(fields: [contractDocId], references: [id], onDelete: Cascade)
+  engineerName  String
+  engineerTitle String
+  district      String?
+
+  @@index([engineerName])
+}
+
+// ─── Contractor Intelligence Models ─────────────────────────
+
+model ContractorConnection {
+  id             String         @id @default(cuid())
+  contractorId   String
+  contractor     Contractor     @relation(fields: [contractorId], references: [id], onDelete: Cascade)
+  connectedName  String
+  connectionType ConnectionType
+  sourceUrl      String
+  sourceLabel    String
+  confidence     Confidence     @default(UNCONFIRMED)
+  createdAt      DateTime       @default(now())
+
+  @@index([contractorId])
+  @@index([connectedName])
+}
+
+model UnitPriceBenchmark {
+  id             String   @id @default(cuid())
+  itemCode       String
+  description    String
+  nationalAvgPhp Float
+  regionalAvgPhp Float?
+  regionId       String?
+  sampleCount    Int
+  lastComputedAt DateTime
+
+  @@unique([itemCode, regionId])
+  @@index([itemCode])
+}
+
+model Politician {
+  name     String  @id
+  position String
+  district String
+  term     String?
+}
+
+// ─── System Models ──────────────────────────────────────────
+
+model OtpCode {
+  id        String   @id @default(cuid())
+  phone     String
+  code      String
+  projectId String?  // Specific project this OTP is requested for
+  expiresAt DateTime
+  used      Boolean  @default(false)
+  createdAt DateTime @default(now())
+
+  @@index([phone, code])
+  @@index([phone, projectId])
+}
+
+model SyncLog {
+  id        String   @id @default(cuid())
+  source    String
+  count     Int
+  success   Boolean
+  error     String?
+  createdAt DateTime @default(now())
+}
+
+model AgencyAccount {
+  id           String   @id @default(cuid())
+  email        String   @unique
+  passwordHash String
+  agencyName   String   @default("DPWH")
+  role         String   @default("OFFICIAL")
+  createdAt    DateTime @default(now())
+}
+
+model NewsArticle {
+  id             String   @id @default(cuid())
+  projectId      String?
+  contractorName String?
+  location       String?
+  title          String
+  description    String
+  url            String   @unique
+  source         String
+  publishedAt    DateTime
+  relevanceScore Float    @default(0)
+  aiIngested     Boolean  @default(false)
+  aiSummary      String?
+  createdAt      DateTime @default(now())
+  project        Project? @relation(fields: [projectId], references: [id], onDelete: Cascade)
+
+  @@index([projectId])
+  @@index([location])
+  @@index([contractorName])
+  @@index([publishedAt])
+}
+

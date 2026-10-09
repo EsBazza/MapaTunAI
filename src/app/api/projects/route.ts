@@ -1,0 +1,137 @@
+import { NextRequest } from 'next/server';
+import { prisma } from '@/lib/prisma';
+import type { Prisma } from '@prisma/client';
+
+export async function GET(request: NextRequest) {
+  try {
+    const { searchParams } = request.nextUrl;
+    const region = searchParams.get('region');
+    const status = searchParams.get('status');
+    const category = searchParams.get('category');
+    const flag = searchParams.get('flag');
+    const province = searchParams.get('province');
+    const page = parseInt(searchParams.get('page') ?? '1', 10);
+    const limit = Math.min(parseInt(searchParams.get('limit') ?? '20', 10), 500);
+    const sort = searchParams.get('sort') ?? 'budgetPHP';
+    const order = searchParams.get('order') ?? 'desc';
+    const q = searchParams.get('q') ?? searchParams.get('search');
+
+    const where: Prisma.ProjectWhereInput = {};
+
+    if (q) {
+      where.OR = [
+        { name: { contains: q, mode: 'insensitive' } },
+        { id: { contains: q, mode: 'insensitive' } },
+        { contractorRaw: { contains: q, mode: 'insensitive' } },
+        { province: { name: { contains: q, mode: 'insensitive' } } },
+      ];
+    }
+
+    if (province || region) {
+      const provinceFilter: Prisma.ProvinceWhereInput = {};
+      if (province) {
+        provinceFilter.name = { contains: province, mode: 'insensitive' };
+      }
+      if (region) {
+        provinceFilter.region = {
+          OR: [
+            { name: { equals: region, mode: 'insensitive' } },
+            { name: { contains: region, mode: 'insensitive' } },
+          ],
+        };
+      }
+
+      const matchingProvinces = await prisma.province.findMany({
+        where: provinceFilter,
+        select: { id: true },
+      });
+
+      if (matchingProvinces.length > 0) {
+        where.provinceId = { in: matchingProvinces.map((p: { id: string }) => p.id) };
+      } else {
+        return Response.json({
+          projects: [],
+          pagination: {
+            page,
+            limit,
+            total: 0,
+            totalPages: 0,
+          },
+        });
+      }
+    }
+
+    if (status) {
+      where.status = status;
+    }
+
+    if (category && category !== 'All') {
+      where.category = { contains: category, mode: 'insensitive' };
+    }
+
+    if (flag) {
+      switch (flag) {
+        case 'stalled':
+          where.flagStalled = true;
+          break;
+        case 'neverStarted':
+          where.flagNeverStarted = true;
+          break;
+        case 'overdue':
+          where.flagOverdue = true;
+          break;
+        case 'overpaid':
+          where.flagOverpaid = true;
+          break;
+        case 'paymentPending':
+          where.flagPaymentPending = true;
+          break;
+      }
+    }
+
+    const validSortFields = ['budgetPHP', 'progress', 'startDate', 'updatedAt'];
+    const sortField = validSortFields.includes(sort) ? sort : 'budgetPHP';
+    const sortOrder = order === 'asc' ? 'asc' : 'desc';
+
+    // Execute queries in parallel
+    const [projects, total] = await Promise.all([
+      prisma.project.findMany({
+        where,
+        include: {
+          province: {
+            include: { region: true },
+          },
+        },
+        orderBy: { [sortField]: sortOrder },
+        skip: (page - 1) * limit,
+        take: limit,
+      }),
+      limit >= 500 ? Promise.resolve(0) : prisma.project.count({ where }),
+    ]);
+
+    const resolvedTotal = limit >= 500 ? projects.length : total;
+
+    return Response.json(
+      {
+        projects,
+        pagination: {
+          page,
+          limit,
+          total: resolvedTotal,
+          totalPages: Math.ceil(resolvedTotal / limit),
+        },
+      },
+      {
+        headers: {
+          'Cache-Control': 'public, s-maxage=30, stale-while-revalidate=120',
+        },
+      }
+    );
+  } catch (error) {
+    console.error('Error fetching projects:', error);
+    return Response.json(
+      { error: 'Failed to fetch projects' },
+      { status: 500 }
+    );
+  }
+}
