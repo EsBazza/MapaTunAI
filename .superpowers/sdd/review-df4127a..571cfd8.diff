@@ -1,0 +1,52 @@
+# Review package: df4127a262c1ac7c207181c14296b066b5d48086..571cfd85376531b08337a5d36d8cbe84fd304265
+
+## Commits
+571cfd8 refactor(header): remove home link and launch map button, retain logo and contractors
+
+## Files changed
+ src/components/header.tsx | 18 +-----------------
+ 1 file changed, 1 insertion(+), 17 deletions(-)
+
+## Diff
+diff --git a/src/components/header.tsx b/src/components/header.tsx
+index ef3e4b6..bae97c2 100644
+--- a/src/components/header.tsx
++++ b/src/components/header.tsx
+@@ -11,36 +11,20 @@ export function Header() {
+           <Image
+             src="/MAPATUNAI.png"
+             alt="MAPATUNAI"
+             width={160}
+             height={45}
+             className="h-9 w-auto object-contain transition-transform group-hover:scale-105"
+             priority
+           />
+         </Link>
+ 
+-        {/* Middle: Navigation Links */}
++        {/* Right: Navigation Links */}
+         <nav className="flex items-center gap-6 sm:gap-8 text-sm font-bold text-[#01367d]">
+-          <Link href="/" className="hover:text-[#ffb241] transition-colors whitespace-nowrap">
+-            Home
+-          </Link>
+-          <Link href="/map" className="hover:text-[#ffb241] transition-colors whitespace-nowrap">
+-            Interactive Map
+-          </Link>
+           <Link href="/contractors" className="hover:text-[#ffb241] transition-colors whitespace-nowrap">
+             Contractors
+           </Link>
+         </nav>
+-
+-        {/* Right: Map Quick Action CTA */}
+-        <div className="flex items-center gap-3">
+-          <Link
+-            href="/map"
+-            className="hidden sm:inline-flex items-center gap-2 rounded-full bg-[#01367d] px-5 py-2 text-xs font-black text-white hover:bg-[#ffb241] hover:text-[#011438] transition-all shadow-sm"
+-          >
+-            Launch Map &rarr;
+-          </Link>
+-        </div>
+       </div>
+     </header>
+   );
+ }

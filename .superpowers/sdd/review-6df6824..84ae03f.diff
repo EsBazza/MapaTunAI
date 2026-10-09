@@ -1,0 +1,1013 @@
+# Review package: 6df6824..84ae03f
+
+## Commits
+84ae03f refactor(dossier): consolidate tabs to overview and citizen reports, relocate contractor link, prune unneeded modules
+
+## Files changed
+ src/app/api/reviews/route.ts                      |  98 ++++++++++---------
+ src/app/projects/[id]/components/CommunityTab.tsx | 114 ++++++++--------------
+ src/app/projects/[id]/page.tsx                    |  91 ++++-------------
+ src/components/review-modal.tsx                   |  88 +----------------
+ 4 files changed, 114 insertions(+), 277 deletions(-)
+
+## Diff
+diff --git a/src/app/api/reviews/route.ts b/src/app/api/reviews/route.ts
+index eec8c51..549c047 100644
+--- a/src/app/api/reviews/route.ts
++++ b/src/app/api/reviews/route.ts
+@@ -52,28 +52,27 @@ export async function POST(request: NextRequest) {
+       qualityRating,
+       workersActive,
+       comment,
+       photoUrl,
+       phone,
+       otp,
+       userLat,
+       userLng,
+     } = body;
+ 
+-    if (!projectId || rating === undefined || !comment || !phone || !otp) {
++    if (!projectId || rating === undefined || !comment) {
+       return Response.json(
+-        { error: 'Missing required fields (projectId, rating, comment, phone, otp)' },
++        { error: 'Missing required fields (projectId, rating, comment)' },
+         { status: 400 }
+       );
+     }
+ 
+-    const trimmedPhone = phone.trim();
+     const numericRating = Math.max(1, Math.min(5, Number(rating)));
+ 
+     // 1. Fetch Project Details for Location Verification
+     const project = await prisma.project.findUnique({
+       where: { id: projectId },
+       select: { id: true, gpsLat: true, gpsLng: true },
+     });
+ 
+     if (!project) {
+       return Response.json({ error: 'Project not found' }, { status: 404 });
+@@ -110,74 +109,81 @@ export async function POST(request: NextRequest) {
+ 
+     if (!isWithin) {
+       return Response.json(
+         {
+           error: `Location verification failed: You are ${distanceKm} km away. Citizen ratings are strictly restricted to residents & observers within ${MAX_REVIEW_RADIUS_KM} km of the project site.`,
+         },
+         { status: 403 }
+       );
+     }
+ 
+-    // 3. Enforce 1 Review per Phone per Project
+-    const phoneHash = crypto.createHash('sha256').update(trimmedPhone).digest('hex');
+-
+-    const existingReview = await prisma.review.findFirst({
+-      where: {
+-        projectId,
+-        phoneHash,
+-      },
+-    });
+-
+-    if (existingReview) {
+-      return Response.json(
+-        {
+-          error:
+-            'This phone number has already submitted a review for this project. Only 1 rating per project is allowed.',
+-        },
+-        { status: 400 }
+-      );
+-    }
+-
+-    // 4. Verify OTP (1 OTP = 1 Review)
+-    const isDemo =
+-      process.env.DEMO_OTP_BYPASS === 'true' &&
+-      process.env.NODE_ENV !== 'production' &&
+-      (trimmedPhone === '+639000000000' || otp === '123456');
++    // 3. Handle Phone & OTP (Optional)
++    let phoneHash: string;
+     let phoneVerified = false;
+ 
+-    if (isDemo) {
+-      phoneVerified = true;
+-    } else {
+-      const validOtp = await prisma.otpCode.findFirst({
++    if (phone && typeof phone === 'string' && phone.trim()) {
++      const trimmedPhone = phone.trim();
++      phoneHash = crypto.createHash('sha256').update(trimmedPhone).digest('hex');
++
++      const existingReview = await prisma.review.findFirst({
+         where: {
+-          phone: trimmedPhone,
+-          code: otp.trim(),
+-          used: false,
+-          expiresAt: { gt: new Date() },
+-          OR: [{ projectId: null }, { projectId: projectId }],
++          projectId,
++          phoneHash,
+         },
+-        orderBy: { createdAt: 'desc' },
+       });
+ 
+-      if (!validOtp) {
++      if (existingReview) {
+         return Response.json(
+-          { error: 'Invalid, expired, or already used OTP code.' },
++          {
++            error:
++              'This phone number has already submitted a review for this project. Only 1 rating per project is allowed.',
++          },
+           { status: 400 }
+         );
+       }
+ 
+-      // Mark OTP as used immediately
+-      await prisma.otpCode.update({
+-        where: { id: validOtp.id },
+-        data: { used: true },
+-      });
+-      phoneVerified = true;
++      if (otp && typeof otp === 'string' && otp.trim()) {
++        const isDemo =
++          process.env.DEMO_OTP_BYPASS === 'true' &&
++          process.env.NODE_ENV !== 'production' &&
++          (trimmedPhone === '+639000000000' || otp === '123456');
++
++        if (isDemo) {
++          phoneVerified = true;
++        } else {
++          const validOtp = await prisma.otpCode.findFirst({
++            where: {
++              phone: trimmedPhone,
++              code: otp.trim(),
++              used: false,
++              expiresAt: { gt: new Date() },
++              OR: [{ projectId: null }, { projectId: projectId }],
++            },
++            orderBy: { createdAt: 'desc' },
++          });
++
++          if (validOtp) {
++            await prisma.otpCode.update({
++              where: { id: validOtp.id },
++              data: { used: true },
++            });
++            phoneVerified = true;
++          }
++        }
++      }
++    } else {
++      // Anonymous submission without phone
++      phoneHash = crypto
++        .createHash('sha256')
++        .update(`anon-${Date.now()}-${Math.random()}-${projectId}`)
++        .digest('hex');
++      phoneVerified = false;
+     }
+ 
+     // 5. Create Review Record
+     const review = await prisma.review.create({
+       data: {
+         projectId,
+         rating: numericRating,
+         progressRating: progressRating !== undefined ? Number(progressRating) : null,
+         qualityRating: qualityRating !== undefined ? Number(qualityRating) : null,
+         workersActive: typeof workersActive === 'boolean' ? workersActive : null,
+diff --git a/src/app/projects/[id]/components/CommunityTab.tsx b/src/app/projects/[id]/components/CommunityTab.tsx
+index 8ee89a5..1fe4b97 100644
+--- a/src/app/projects/[id]/components/CommunityTab.tsx
++++ b/src/app/projects/[id]/components/CommunityTab.tsx
+@@ -1,23 +1,20 @@
+ 'use client';
+ 
+ import { useState } from 'react';
+ import {
+   Star,
+-  ShieldCheck,
+   MapPin,
+   ThumbsUp,
+   MessageSquare,
+   Users,
+   Camera,
+-  CheckCircle2,
+-  HardHat,
+   AlertCircle,
+ } from 'lucide-react';
+ import { formatDate, formatDistance } from '@/lib/format';
+ import { ProjectDetailData } from '@/hooks/use-projects';
+ import ReviewModal from '@/components/review-modal';
+ 
+ interface CommunityTabProps {
+   project: ProjectDetailData;
+   onReviewSubmitted?: () => void;
+ }
+@@ -40,27 +37,20 @@ export default function CommunityTab({ project, onReviewSubmitted }: CommunityTa
+ 
+   // Calculate physical progress perception average
+   const progressRatings = reviews
+     .map((r) => r.progressRating)
+     .filter((p): p is number => p !== null && p !== undefined);
+   const avgPerceivedProgress =
+     progressRatings.length > 0
+       ? Math.round(progressRatings.reduce((a, b) => a + b, 0) / progressRatings.length)
+       : null;
+ 
+-  // Workforce presence
+-  const activeWorkerVotes = reviews.filter((r) => r.workersActive === true).length;
+-  const abandonedVotes = reviews.filter((r) => r.workersActive === false).length;
+-  const totalWorkerVotes = activeWorkerVotes + abandonedVotes;
+-  const activePct =
+-    totalWorkerVotes > 0 ? Math.round((activeWorkerVotes / totalWorkerVotes) * 100) : null;
+-
+   const handleCorroborate = async (reviewId: string) => {
+     if (corroboratedSet.has(reviewId)) return;
+ 
+     // Optimistic update
+     setCorroboratedSet((prev) => new Set(prev).add(reviewId));
+     setCorroborations((prev) => ({
+       ...prev,
+       [reviewId]: (prev[reviewId] || 0) + 1,
+     }));
+ 
+@@ -70,154 +60,138 @@ export default function CommunityTab({ project, onReviewSubmitted }: CommunityTa
+         headers: { 'Content-Type': 'application/json' },
+         body: JSON.stringify({ reviewId }),
+       });
+     } catch (err) {
+       console.error('Failed to corroborate review:', err);
+     }
+   };
+ 
+   return (
+     <div className="space-y-6">
+-      {/* 1. Header & Quick Metrics Grid */}
+-      <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
++      {/* 1. Eyewitness Report Action Banner */}
++      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 rounded-xl border border-slate-800 bg-slate-900/60 p-4 sm:p-5 shadow-lg">
++        <div className="flex items-center gap-3.5">
++          <div className="flex h-11 w-11 items-center justify-center rounded-xl bg-[#01367d] text-[#ffb241] shrink-0 shadow-sm">
++            <Camera className="h-5 w-5" />
++          </div>
++          <div>
++            <h4 className="text-sm font-bold text-white">Have you inspected this project site?</h4>
++            <p className="text-xs text-slate-400 mt-0.5">
++              Submit an eyewitness report with ground photos to verify actual construction progress.
++            </p>
++          </div>
++        </div>
++        <button
++          onClick={() => setIsReviewModalOpen(true)}
++          className="inline-flex items-center justify-center gap-2 rounded-xl bg-[#ffb241] px-5 py-2.5 text-xs font-black text-[#011438] hover:bg-amber-300 transition shadow shrink-0"
++        >
++          <Camera className="h-4 w-4" />
++          <span>Submit Eyewitness Report</span>
++        </button>
++      </div>
++
++      {/* 2. Quick Metrics Grid (2 Prominent Cards) */}
++      <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+         {/* Star Rating Breakdown */}
+         <div className="rounded-xl border border-slate-800 bg-slate-900/60 p-5 shadow-lg">
+           <div className="flex items-center gap-2 mb-3">
+-            <Star className="h-4 w-4 text-amber-400 fill-amber-400" />
++            <Star className="h-4 w-4 text-[#ffb241] fill-[#ffb241]" />
+             <h4 className="text-xs font-semibold uppercase tracking-wider text-slate-400">
+               Community Satisfaction
+             </h4>
+           </div>
+ 
+           <div className="flex items-baseline gap-3 mb-3">
+             <span className="text-3xl font-extrabold text-white">
+               {avgRating.toFixed(1)}
+             </span>
+             <div className="flex items-center gap-0.5">
+               {[1, 2, 3, 4, 5].map((s) => (
+                 <Star
+                   key={s}
+                   className={`h-4 w-4 ${
+                     s <= Math.round(avgRating)
+-                      ? 'text-amber-400 fill-amber-400'
++                      ? 'text-[#ffb241] fill-[#ffb241]'
+                       : 'text-slate-700'
+                   }`}
+                 />
+               ))}
+             </div>
+             <span className="text-xs text-slate-500">({totalReviews} reviews)</span>
+           </div>
+ 
+           <div className="space-y-1.5">
+             {starCounts.map((sc) => (
+               <div key={sc.stars} className="flex items-center gap-2 text-xs">
+                 <span className="w-4 text-slate-400">{sc.stars}★</span>
+                 <div className="h-1.5 flex-1 rounded-full bg-slate-800 overflow-hidden">
+                   <div
+-                    className="h-full rounded-full bg-amber-400"
++                    className="h-full rounded-full bg-[#ffb241]"
+                     style={{ width: `${sc.pct}%` }}
+                   />
+                 </div>
+                 <span className="w-6 text-right text-[10px] text-slate-500">
+                   {sc.count}
+                 </span>
+               </div>
+             ))}
+           </div>
+         </div>
+ 
+         {/* Physical Progress Perception Contrast */}
+         <div className="rounded-xl border border-slate-800 bg-slate-900/60 p-5 shadow-lg flex flex-col justify-between">
+           <div>
+             <div className="flex items-center gap-2 mb-3">
+-              <Users className="h-4 w-4 text-cyan-400" />
++              <Users className="h-4 w-4 text-[#ffb241]" />
+               <h4 className="text-xs font-semibold uppercase tracking-wider text-slate-400">
+                 Ground Reality vs DPWH Claim
+               </h4>
+             </div>
+ 
+             <div className="space-y-3">
+               <div>
+                 <div className="flex justify-between text-xs mb-1">
+                   <span className="text-slate-400">Official Claimed Progress</span>
+                   <span className="font-bold text-white">{Math.round(project.progress)}%</span>
+                 </div>
+                 <div className="h-2 w-full rounded-full bg-slate-800 overflow-hidden">
+                   <div
+-                    className="h-full rounded-full bg-cyan-500"
++                    className="h-full rounded-full bg-[#01367d]"
+                     style={{ width: `${Math.min(100, project.progress)}%` }}
+                   />
+                 </div>
+               </div>
+ 
+               <div>
+                 <div className="flex justify-between text-xs mb-1">
+                   <span className="text-slate-400">Citizen Perceived Completion</span>
+-                  <span className="font-bold text-amber-400">
++                  <span className="font-bold text-[#ffb241]">
+                     {avgPerceivedProgress !== null ? `${avgPerceivedProgress}%` : 'No data'}
+                   </span>
+                 </div>
+                 <div className="h-2 w-full rounded-full bg-slate-800 overflow-hidden">
+                   <div
+-                    className="h-full rounded-full bg-amber-400"
++                    className="h-full rounded-full bg-[#ffb241]"
+                     style={{ width: `${avgPerceivedProgress || 0}%` }}
+                   />
+                 </div>
+               </div>
+             </div>
+           </div>
+ 
+           {avgPerceivedProgress !== null &&
+             project.progress - avgPerceivedProgress >= 25 && (
+-              <div className="mt-3 rounded bg-rose-950/40 p-2 text-[11px] text-rose-300 border border-rose-800/40">
+-                ⚠️ Significant divergence between official claim and ground observers.
+-              </div>
+-            )}
+-        </div>
+-
+-        {/* Workforce Presence Indicator */}
+-        <div className="rounded-xl border border-slate-800 bg-slate-900/60 p-5 shadow-lg flex flex-col justify-between">
+-          <div>
+-            <div className="flex items-center gap-2 mb-3">
+-              <HardHat className="h-4 w-4 text-emerald-400" />
+-              <h4 className="text-xs font-semibold uppercase tracking-wider text-slate-400">
+-                Active Workers on Site
+-              </h4>
+-            </div>
+-
+-            {totalWorkerVotes > 0 ? (
+-              <div>
+-                <div className="text-2xl font-black text-white mb-1">
+-                  {activePct}%{' '}
+-                  <span className="text-xs font-normal text-slate-400">
+-                    report active workers
+-                  </span>
+-                </div>
+-                <p className="text-xs text-slate-400 mt-2">
+-                  {activeWorkerVotes} citizens observed workers present, while{' '}
+-                  {abandonedVotes} reported an abandoned or vacant job site.
+-                </p>
+-              </div>
+-            ) : (
+-              <div className="text-xs text-slate-400">
+-                No workforce presence data logged yet. Be the first eyewitness to submit a report.
++              <div className="mt-3 flex items-center gap-2 rounded bg-rose-950/40 p-2 text-[11px] text-rose-300 border border-rose-800/40">
++                <AlertCircle className="h-3.5 w-3.5 shrink-0" />
++                <span>Significant divergence between official claim and ground observers.</span>
+               </div>
+             )}
+-          </div>
+-
+-          <button
+-            onClick={() => setIsReviewModalOpen(true)}
+-            className="mt-4 inline-flex items-center justify-center gap-1.5 w-full rounded-lg bg-cyan-600 px-3.5 py-2 text-xs font-semibold text-white shadow hover:bg-cyan-500 transition"
+-          >
+-            <Camera className="h-4 w-4" />
+-            <span>Submit Eyewitness Report</span>
+-          </button>
+         </div>
+       </div>
+ 
+       {/* 2. Reviews Feed */}
+       <div className="space-y-4">
+         <div className="flex items-center justify-between">
+           <h4 className="text-xs font-semibold uppercase tracking-wider text-slate-400">
+             Verified Eyewitness Reports ({totalReviews})
+           </h4>
+         </div>
+@@ -235,43 +209,35 @@ export default function CommunityTab({ project, onReviewSubmitted }: CommunityTa
+                   className="rounded-xl border border-slate-800 bg-slate-900/40 p-4 shadow transition hover:bg-slate-900/60"
+                 >
+                   <div className="flex flex-wrap items-center justify-between gap-2 mb-2">
+                     <div className="flex items-center gap-2">
+                       <div className="flex items-center gap-0.5">
+                         {[1, 2, 3, 4, 5].map((s) => (
+                           <Star
+                             key={s}
+                             className={`h-3.5 w-3.5 ${
+                               s <= Math.round(r.rating)
+-                                ? 'text-amber-400 fill-amber-400'
++                                ? 'text-[#ffb241] fill-[#ffb241]'
+                                 : 'text-slate-700'
+                             }`}
+                           />
+                         ))}
+                       </div>
+ 
+                       {/* Distance Badge */}
+                       {r.distanceKm !== null && r.distanceKm !== undefined && (
+                         <span className="inline-flex items-center gap-1 rounded bg-slate-800 px-2 py-0.5 text-[10px] font-medium text-slate-300 border border-slate-700">
+-                          <MapPin className="h-3 w-3 text-cyan-400" />
++                          <MapPin className="h-3 w-3 text-[#ffb241]" />
+                           <span>{formatDistance(r.distanceKm)}</span>
+                         </span>
+                       )}
+ 
+-                      {/* Phone Verified Badge */}
+-                      {r.phoneVerified && (
+-                        <span className="inline-flex items-center gap-1 rounded bg-emerald-950/60 px-2 py-0.5 text-[10px] font-medium text-emerald-300 border border-emerald-800">
+-                          <ShieldCheck className="h-3 w-3" />
+-                          <span>SMS Verified</span>
+-                        </span>
+-                      )}
+-
+                       {/* Active Workers Tag */}
+                       {r.workersActive !== null && r.workersActive !== undefined && (
+                         <span
+                           className={`rounded px-1.5 py-0.5 text-[10px] font-medium ${
+                             r.workersActive
+                               ? 'bg-emerald-950 text-emerald-400 border border-emerald-800'
+                               : 'bg-rose-950 text-rose-400 border border-rose-800'
+                           }`}
+                         >
+                           {r.workersActive ? 'Active Workers' : 'Site Abandoned'}
+@@ -288,41 +254,41 @@ export default function CommunityTab({ project, onReviewSubmitted }: CommunityTa
+                     {r.comment}
+                   </p>
+ 
+                   {/* Photo attachment if available */}
+                   {r.photoUrl && (
+                     <div className="mb-3">
+                       <a
+                         href={r.photoUrl}
+                         target="_blank"
+                         rel="noopener noreferrer"
+-                        className="inline-block rounded-lg overflow-hidden border border-slate-800 hover:border-cyan-500 transition"
++                        className="inline-block rounded-lg overflow-hidden border border-slate-800 hover:border-[#ffb241] transition"
+                       >
+                         {/* eslint-disable-next-line @next/next/no-img-element */}
+                         <img
+                           src={r.photoUrl}
+                           alt="Field inspection photo"
+                           className="h-32 w-48 object-cover"
+                         />
+                       </a>
+                     </div>
+                   )}
+ 
+                   {/* Corroboration Action Button */}
+                   <div className="flex items-center justify-between pt-2 border-t border-slate-800/60 text-xs">
+                     <button
+                       onClick={() => handleCorroborate(r.id)}
+                       disabled={hasCorroborated}
+                       className={`inline-flex items-center gap-1.5 rounded px-2.5 py-1 text-xs font-semibold transition ${
+                         hasCorroborated
+-                          ? 'text-cyan-400 bg-cyan-950/40 cursor-default'
+-                          : 'text-slate-400 hover:text-cyan-300 hover:bg-slate-800'
++                          ? 'text-[#ffb241] bg-amber-950/40 cursor-default'
++                          : 'text-slate-400 hover:text-[#ffb241] hover:bg-slate-800'
+                       }`}
+                     >
+                       <ThumbsUp className="h-3.5 w-3.5" />
+                       <span>
+                         {hasCorroborated ? 'Corroborated' : 'Corroborate report'} (
+                         {totalCorroborations})
+                       </span>
+                     </button>
+                     <span className="text-[10px] text-slate-500">
+                       Protected by SHA-256 Anti-Spam
+@@ -337,21 +303,21 @@ export default function CommunityTab({ project, onReviewSubmitted }: CommunityTa
+             <MessageSquare className="mx-auto h-8 w-8 text-slate-600 mb-2" />
+             <p className="text-sm font-semibold text-slate-300">
+               No Citizen Eyewitness Reports Yet
+             </p>
+             <p className="text-xs text-slate-500 mt-1 max-w-sm mx-auto mb-4">
+               Are you located near this project site in {project.province?.name}?
+               Help your community by submitting a photo and rating the construction ground reality.
+             </p>
+             <button
+               onClick={() => setIsReviewModalOpen(true)}
+-              className="inline-flex items-center gap-1.5 rounded-lg bg-cyan-600 px-4 py-2 text-xs font-semibold text-white shadow hover:bg-cyan-500 transition"
++              className="inline-flex items-center gap-1.5 rounded-lg bg-[#ffb241] px-4 py-2 text-xs font-black text-[#011438] shadow hover:bg-amber-300 transition"
+             >
+               <Camera className="h-4 w-4" />
+               <span>Submit First Eyewitness Report</span>
+             </button>
+           </div>
+         )}
+       </div>
+ 
+       {/* Review Modal Trigger */}
+       {isReviewModalOpen && (
+diff --git a/src/app/projects/[id]/page.tsx b/src/app/projects/[id]/page.tsx
+index 84659c8..0e33bc1 100644
+--- a/src/app/projects/[id]/page.tsx
++++ b/src/app/projects/[id]/page.tsx
+@@ -1,74 +1,62 @@
+-﻿'use client';
++'use client';
+ 
+ import { useState, use, useEffect } from 'react';
+ import Link from 'next/link';
+ import Image from 'next/image';
+-import { useRouter } from 'next/navigation';
+ import {
+   MapPin,
+   Building2,
+   Calendar,
+   Share2,
+   ExternalLink,
+-  FileQuestion,
+   FileText,
+   Loader2,
+   ChevronRight,
+   ShieldAlert,
+ } from 'lucide-react';
+ import { useProject } from '@/hooks/use-projects';
+ import { formatCurrency, formatDate, cleanContractorName } from '@/lib/format';
+ import { getRiskScoreTier } from '@/lib/anomaly-flags';
+ import OverviewTab from './components/OverviewTab';
+-import SatelliteTab from './components/SatelliteTab';
+-import NewsTab from './components/NewsTab';
+-import FinancialsTab from './components/FinancialsTab';
+ import CommunityTab from './components/CommunityTab';
+-import ConnectionsTab from './components/ConnectionsTab';
+ 
+ interface PageProps {
+   params: Promise<{ id: string }>;
+ }
+ 
+-type TabType = 'overview' | 'satellite' | 'news' | 'financials' | 'community' | 'connections';
++type TabType = 'overview' | 'community';
+ 
+ export default function ProjectDossierPage({ params }: PageProps) {
+   const { id } = use(params);
+-  const router = useRouter();
+   const { data: project, isLoading, error, refetch } = useProject(id);
+ 
+   const [activeTab, setActiveTab] = useState<TabType>('overview');
+   const [copied, setCopied] = useState<boolean>(false);
+ 
+   // Sync with URL hash if provided
+   useEffect(() => {
+     if (typeof window !== 'undefined' && window.location.hash) {
+       const hash = window.location.hash.replace('#', '') as TabType;
+-      const validTabs: TabType[] = [
+-        'overview',
+-        'satellite',
+-        'news',
+-        'financials',
+-        'community',
+-        'connections',
+-      ];
++      const validTabs: TabType[] = ['overview', 'community'];
+       if (validTabs.includes(hash)) {
+-        setActiveTab(hash);
++        setTimeout(() => setActiveTab(hash), 0);
+       }
+     }
+   }, []);
+ 
+   const handleTabChange = (tab: TabType) => {
+-    setActiveTab(tab);
+-    if (typeof window !== 'undefined') {
+-      window.history.replaceState(null, '', `#${tab}`);
++    if (tab === 'overview' || tab === 'community') {
++      setActiveTab(tab);
++      if (typeof window !== 'undefined') {
++        window.history.replaceState(null, '', `#${tab}`);
++      }
+     }
+   };
+ 
+   const handleShare = async () => {
+     if (typeof window !== 'undefined') {
+       await navigator.clipboard.writeText(window.location.href);
+       setCopied(true);
+       setTimeout(() => setCopied(false), 2500);
+     }
+   };
+@@ -104,25 +92,21 @@ export default function ProjectDossierPage({ params }: PageProps) {
+         </Link>
+       </div>
+     );
+   }
+ 
+   const contractorName = cleanContractorName(project.contractorRaw || 'Unknown Contractor');
+   const riskTier = getRiskScoreTier(project.riskScore || 0);
+ 
+   const tabs: Array<{ id: TabType; label: string; count?: number }> = [
+     { id: 'overview', label: 'Overview' },
+-    { id: 'satellite', label: 'Satellite Verification' },
+-    { id: 'financials', label: 'Financials & BOQ' },
+-    { id: 'news', label: 'News & Media' },
+     { id: 'community', label: 'Citizen Reports', count: project.reviews?.length || 0 },
+-    { id: 'connections', label: 'Alliance & Network' },
+   ];
+ 
+   return (
+     <div className="min-h-screen bg-[#f4f6fb] text-gray-900 selection:bg-[#ffb241]/30 pb-20">
+       {/* --- HERO SECTION (Homepage Deep Navy Aesthetic) ---------- */}
+       <div className="relative w-full bg-[#011438] text-white px-6 sm:px-12 lg:px-16 pt-8 pb-12 rounded-b-[40px] shadow-2xl border-b border-[#01367d]/40 overflow-hidden">
+         {/* Layer 0: Subtle Dual Asset Overlay */}
+         <div
+           className="absolute inset-0 bg-cover bg-center opacity-25 mix-blend-screen pointer-events-none"
+           style={{ backgroundImage: "url('/bg2.png')" }}
+@@ -194,24 +178,29 @@ export default function ProjectDossierPage({ params }: PageProps) {
+               {project.category}
+             </span>
+           </div>
+ 
+           {/* Project Title and Metadata */}
+           <div>
+             <h1 className="text-2xl sm:text-3xl lg:text-4xl font-black text-white tracking-tight leading-tight">
+               {project.name}
+             </h1>
+             <div className="flex flex-wrap items-center gap-5 text-xs text-white/80 mt-3 font-semibold">
+-              <div className="flex items-center gap-1.5 text-white">
++              <Link
++                href={`/contractors?q=${encodeURIComponent(contractorName)}`}
++                className="inline-flex items-center gap-1.5 text-white hover:text-[#ffb241] transition group"
++                title="View Contractor Profile in Registry"
++              >
+                 <Building2 className="h-4 w-4 text-[#ffb241]" />
+-                <span className="text-sm font-bold">{contractorName}</span>
+-              </div>
++                <span className="text-sm font-bold group-hover:underline">{contractorName}</span>
++                <ExternalLink className="h-3 w-3 text-white/50 group-hover:text-[#ffb241]" />
++              </Link>
+               <div className="flex items-center gap-1.5">
+                 <Calendar className="h-4 w-4 text-white/60" />
+                 <span>
+                   {formatDate(project.startDate)} &rarr;{' '}
+                   {project.completionDate ? formatDate(project.completionDate) : 'Ongoing'}
+                 </span>
+               </div>
+               <span className="font-mono text-white/60 bg-white/10 px-2 py-0.5 rounded">
+                 CONTRACT: {project.id}
+               </span>
+@@ -292,57 +281,29 @@ export default function ProjectDossierPage({ params }: PageProps) {
+               project.contractDocument.sourcePdfUrl.startsWith('http') ? (
+               <a
+                 href={project.contractDocument.sourcePdfUrl}
+                 target="_blank"
+                 rel="noopener noreferrer"
+                 className="inline-flex items-center gap-2 rounded-full bg-[#ffb241] px-5 py-2.5 text-xs font-black text-[#011438] shadow hover:bg-amber-300 transition"
+               >
+                 <FileText className="h-4 w-4" />
+                 <span>View Full Contract (PDF) &rarr;</span>
+               </a>
+-            ) : (
+-              <button
+-                onClick={() => handleTabChange('financials')}
+-                className="inline-flex items-center gap-2 rounded-full bg-[#ffb241] px-5 py-2.5 text-xs font-black text-[#011438] shadow hover:bg-amber-300 transition"
+-              >
+-                <FileText className="h-4 w-4" />
+-                <span>View Contract &amp; BOQ</span>
+-              </button>
+-            )}
+-
+-            <a
+-              href={`https://www.dpwh.gov.ph/dpwh/business/procurement/civil-works/contract/${encodeURIComponent(project.id)}`}
+-              target="_blank"
+-              rel="noopener noreferrer"
+-              className="inline-flex items-center gap-2 rounded-full border border-white/20 bg-white/10 px-4 py-2.5 text-xs font-bold text-white hover:bg-white/20 transition"
+-            >
+-              <Building2 className="h-4 w-4 text-[#ffb241]" />
+-              <span>DPWH Civil Works Portal &rarr;</span>
+-            </a>
++            ) : null}
+ 
+             <button
+               onClick={handleShare}
+               className="inline-flex items-center gap-2 rounded-full border border-white/20 bg-white/10 px-4 py-2.5 text-xs font-bold text-white hover:bg-white/20 transition"
+             >
+               <Share2 className="h-4 w-4" />
+               <span>{copied ? 'Link Copied!' : 'Share Dossier'}</span>
+             </button>
+-
+-            <a
+-              href="https://www.foi.gov.ph/"
+-              target="_blank"
+-              rel="noopener noreferrer"
+-              className="inline-flex items-center gap-2 rounded-full border border-white/20 bg-white/10 px-4 py-2.5 text-xs font-bold text-white hover:bg-white/20 transition"
+-            >
+-              <FileQuestion className="h-4 w-4 text-[#ffb241]" />
+-              <span>File FOI Request &rarr;</span>
+-            </a>
+           </div>
+         </div>
+       </div>
+ 
+       {/* --- TAB NAVIGATION STRIP (Homepage Aesthetic) ----------- */}
+       <div className="sticky top-0 z-30 border-b border-[#01367d]/15 bg-white/95 backdrop-blur-md px-6 sm:px-12 lg:px-16 shadow-xs">
+         <div className="mx-auto max-w-7xl">
+           <div className="flex space-x-2 overflow-x-auto py-3 scrollbar-none">
+             {tabs.map((tab) => {
+               const isActive = activeTab === tab.id;
+@@ -374,39 +335,23 @@ export default function ProjectDossierPage({ params }: PageProps) {
+           </div>
+         </div>
+       </div>
+ 
+       {/* --- TAB CONTENT PANELS --------------------------------- */}
+       <main className="mx-auto max-w-7xl px-6 sm:px-12 lg:px-16 py-8">
+         <div className={activeTab === 'overview' ? 'block' : 'hidden'}>
+           <OverviewTab project={project} onNavigateTab={(tab) => handleTabChange(tab as TabType)} />
+         </div>
+ 
+-        <div className={activeTab === 'satellite' ? 'block' : 'hidden'}>
+-          <SatelliteTab project={project} />
+-        </div>
+-
+-        <div className={activeTab === 'financials' ? 'block' : 'hidden'}>
+-          <FinancialsTab project={project} />
+-        </div>
+-
+-        <div className={activeTab === 'news' ? 'block' : 'hidden'}>
+-          <NewsTab project={project} />
+-        </div>
+-
+         <div className={activeTab === 'community' ? 'block' : 'hidden'}>
+           <CommunityTab project={project} onReviewSubmitted={() => refetch()} />
+         </div>
+-
+-        <div className={activeTab === 'connections' ? 'block' : 'hidden'}>
+-          <ConnectionsTab project={project} />
+-        </div>
+       </main>
+ 
+       {/* --- FULL-WIDTH FOOTER (Homepage Aesthetic) ------------- */}
+       <footer className="w-full mt-16 py-12 px-6 md:px-16 bg-[#eeeeee] text-[#01367d] border-t border-[#01367d]/15 text-center">
+         <div className="max-w-3xl mx-auto space-y-3">
+           <div className="flex items-center justify-center">
+             <Image
+               src="/MAPATUNAI.png"
+               alt="MAPATUNAI Logo"
+               width={140}
+diff --git a/src/components/review-modal.tsx b/src/components/review-modal.tsx
+index ce72bb7..536a516 100644
+--- a/src/components/review-modal.tsx
++++ b/src/components/review-modal.tsx
+@@ -1,11 +1,11 @@
+-﻿'use client';
++'use client';
+ 
+ import { useState, useEffect, useCallback } from 'react';
+ import { isWithinReviewRadius, MAX_REVIEW_RADIUS_KM } from '@/lib/geo';
+ 
+ interface ReviewModalProps {
+   projectId: string;
+   projectName: string;
+   projectLat?: number;
+   projectLng?: number;
+   isOpen: boolean;
+@@ -23,23 +23,20 @@ export default function ReviewModal({
+   onSuccess,
+ }: ReviewModalProps) {
+   const [rating, setRating] = useState<number>(5);
+   const [progressRating, setProgressRating] = useState<number>(80);
+   const [qualityRating] = useState<number>(4);
+   const [workersActive, setWorkersActive] = useState<boolean>(true);
+   const [comment, setComment] = useState<string>('');
+   const [photoUrl, setPhotoUrl] = useState<string>('');
+   const [previewUrl, setPreviewUrl] = useState<string | null>(null);
+   const [isUploadingPhoto, setIsUploadingPhoto] = useState<boolean>(false);
+-  const [phone, setPhone] = useState<string>('');
+-  const [otp, setOtp] = useState<string>('');
+-  const [otpSent, setOtpSent] = useState<boolean>(false);
+   const [isSubmitting, setIsSubmitting] = useState<boolean>(false);
+   const [errorMsg, setErrorMsg] = useState<string | null>(null);
+ 
+   // GPS Geolocation State
+   const [userLat, setUserLat] = useState<number | null>(null);
+   const [userLng, setUserLng] = useState<number | null>(null);
+   const [geoStatus, setGeoStatus] = useState<'idle' | 'locating' | 'granted' | 'denied' | 'unsupported'>('idle');
+   const [geoError, setGeoError] = useState<string | null>(null);
+ 
+   const requestGeolocation = useCallback(() => {
+@@ -69,21 +66,20 @@ export default function ReviewModal({
+       },
+       { enableHighAccuracy: true, timeout: 12000, maximumAge: 30000 }
+     );
+   }, []);
+ 
+   useEffect(() => {
+     if (isOpen) {
+       const timer = setTimeout(() => {
+         requestGeolocation();
+         setErrorMsg(null);
+-        setOtpSent(false);
+         setPhotoUrl('');
+         setPreviewUrl(null);
+         setIsUploadingPhoto(false);
+       }, 0);
+       return () => clearTimeout(timer);
+     }
+   }, [isOpen, requestGeolocation]);
+ 
+   if (!isOpen) return null;
+ 
+@@ -145,90 +141,54 @@ export default function ReviewModal({
+   const hasProjectCoords = projectLat !== undefined && projectLng !== undefined && projectLat !== 0 && projectLng !== 0;
+   const hasUserCoords = userLat !== null && userLng !== null;
+ 
+   const geoCheck =
+     hasProjectCoords && hasUserCoords
+       ? isWithinReviewRadius(userLat, userLng, projectLat, projectLng, MAX_REVIEW_RADIUS_KM)
+       : null;
+ 
+   const isEligibleByDistance = geoCheck ? geoCheck.isWithin : false;
+ 
+-  const handleSendOtp = async () => {
+-    setErrorMsg(null);
+-    if (!phone || phone.trim().length < 10) {
+-      setErrorMsg('Please enter a valid Philippine mobile number (+63...)');
+-      return;
+-    }
+-
+-    if (!isEligibleByDistance) {
+-      setErrorMsg(`You must be within ${MAX_REVIEW_RADIUS_KM} km of the project site to request an OTP and submit a rating.`);
+-      return;
+-    }
+-
+-    try {
+-      const res = await fetch('/api/report/otp', {
+-        method: 'POST',
+-        headers: { 'Content-Type': 'application/json' },
+-        body: JSON.stringify({ phone: phone.trim(), projectId }),
+-      });
+-
+-      const data = await res.json();
+-      if (res.ok) {
+-        setOtpSent(true);
+-      } else {
+-        setErrorMsg(data.error || 'Failed to dispatch OTP. (Use Demo +639000000000)');
+-      }
+-    } catch {
+-      setErrorMsg('Network error while requesting verification OTP.');
+-    }
+-  };
+-
+   const handleSubmit = async (e: React.FormEvent) => {
+     e.preventDefault();
+     setErrorMsg(null);
+ 
+     if (!hasUserCoords) {
+       setErrorMsg('GPS location is required to verify that you are within 15 km of the project site.');
+       return;
+     }
+ 
+     if (!isEligibleByDistance) {
+       setErrorMsg(
+         `Distance restriction: You are ${geoCheck?.distanceKm} km away. Ratings are limited to within ${MAX_REVIEW_RADIUS_KM} km.`
+       );
+       return;
+     }
+ 
+     if (!comment.trim()) {
+       setErrorMsg('Please enter your observations or feedback.');
+       return;
+     }
+-    if (!otp.trim()) {
+-      setErrorMsg('Please enter the 6-digit verification code.');
+-      return;
+-    }
+ 
+     setIsSubmitting(true);
+     try {
+       const res = await fetch('/api/reviews', {
+         method: 'POST',
+         headers: { 'Content-Type': 'application/json' },
+         body: JSON.stringify({
+           projectId,
+           rating,
+           progressRating,
+           qualityRating,
+           workersActive,
+           comment,
+           photoUrl: photoUrl.trim() || undefined,
+-          phone: phone.trim(),
+-          otp: otp.trim(),
+           userLat,
+           userLng,
+         }),
+       });
+ 
+       const data = await res.json();
+       if (res.ok) {
+         onSuccess();
+         onClose();
+       } else {
+@@ -478,77 +438,37 @@ export default function ReviewModal({
+                 <span className="font-bold text-gray-800 text-xs">
+                   {isUploadingPhoto ? 'Uploading image...' : 'Click to Upload Ground Photo'}
+                 </span>
+                 <span className="text-[10px] text-gray-400 mt-0.5">
+                   Supports JPG, PNG, WebP or camera capture (Max 10MB)
+                 </span>
+               </label>
+             )}
+           </div>
+ 
+-          {/* Phone Verification Section (1 OTP = 1 Review) */}
+-          <div className="rounded-xl border border-blue-100 bg-blue-50/60 p-3.5 space-y-3">
+-            <div className="flex items-center justify-between">
+-              <div>
+-                <span className="font-bold text-blue-900">Anti-Fraud Phone Verification</span>
+-                <p className="text-[10px] text-blue-700 mt-0.5">1 OTP code = 1 review per project</p>
+-              </div>
+-            </div>
+-
+-            <div className="flex items-center gap-2">
+-              <input
+-                type="tel"
+-                value={phone}
+-                onChange={(e) => setPhone(e.target.value)}
+-                placeholder="+639171234567"
+-                className="w-full rounded-lg border border-gray-300 bg-white p-2 text-xs text-gray-900"
+-              />
+-              <button
+-                type="button"
+-                onClick={handleSendOtp}
+-                disabled={!isEligibleByDistance}
+-                className="shrink-0 rounded-lg bg-blue-600 px-3 py-2 text-xs font-bold text-white shadow hover:bg-blue-700 transition disabled:opacity-50 disabled:cursor-not-allowed"
+-                title={!isEligibleByDistance ? 'Must be within 15 km of project to request OTP' : ''}
+-              >
+-                {otpSent ? 'Resend OTP' : 'Send OTP'}
+-              </button>
+-            </div>
+-
+-            <div>
+-              <input
+-                type="text"
+-                value={otp}
+-                onChange={(e) => setOtp(e.target.value)}
+-                placeholder="Enter 6-digit OTP code"
+-                maxLength={6}
+-                className="w-full rounded-lg border border-gray-300 bg-white p-2 text-xs text-gray-900 font-mono tracking-widest text-center font-bold"
+-              />
+-            </div>
+-          </div>
+-
+           <div className="flex items-center justify-end gap-2 pt-2 border-t border-gray-100">
+             <button
+               type="button"
+               onClick={onClose}
+               className="rounded-xl border border-gray-300 px-4 py-2 text-xs font-semibold text-gray-700 hover:bg-gray-50 transition"
+             >
+               Cancel
+             </button>
+             <button
+               type="submit"
+               disabled={isSubmitting || isUploadingPhoto || !isEligibleByDistance}
+-              className="rounded-xl bg-blue-600 px-5 py-2 text-xs font-bold text-white shadow hover:bg-blue-700 transition disabled:opacity-50 disabled:cursor-not-allowed"
++              className="rounded-xl bg-[#01367d] px-5 py-2 text-xs font-bold text-white shadow hover:bg-[#ffb241] hover:text-[#011438] transition disabled:opacity-50 disabled:cursor-not-allowed"
+             >
+               {isSubmitting
+-                ? 'Verifying & Submitting...'
++                ? 'Submitting Report...'
+                 : isUploadingPhoto
+                 ? 'Uploading Photo...'
+                 : !isEligibleByDistance
+                 ? 'Location Restricted (> 15 km)'
+-                : 'Submit Verified Review'}
++                : 'Submit Eyewitness Report'}
+             </button>
+           </div>
+         </form>
+       </div>
+     </div>
+   );
+ }
