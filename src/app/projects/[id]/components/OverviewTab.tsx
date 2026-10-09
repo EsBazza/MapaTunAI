@@ -60,7 +60,8 @@ export default function OverviewTab({ project, onNavigateTab }: OverviewTabProps
           throw new Error(`HTTP ${res.status}`);
         }
 
-        const data: ForensicAuditReport = await res.json();
+        const resData = await res.json();
+        const data: ForensicAuditReport = (resData?.report || resData) as ForensicAuditReport;
         if (isMounted) {
           setAuditReport(data);
         }
@@ -369,7 +370,7 @@ export default function OverviewTab({ project, onNavigateTab }: OverviewTabProps
         </div>
 
         {/* Discrepancy Audit Metrics Grid */}
-        {auditReport && (
+        {auditReport?.discrepancyAudit && (
           <div className="space-y-4">
             <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
               {/* Financial Payout Stat */}
@@ -472,7 +473,7 @@ export default function OverviewTab({ project, onNavigateTab }: OverviewTabProps
         )}
 
         {/* Temporal Cross-Referencing Findings */}
-        {auditReport && (
+        {auditReport?.temporalComparison && (
           <div className="rounded-2xl bg-white/5 border border-white/10 p-5 backdrop-blur-sm space-y-3">
             <div className="flex flex-wrap items-center justify-between gap-2 border-b border-white/10 pb-3">
               <div className="flex items-center gap-2">
@@ -501,7 +502,7 @@ export default function OverviewTab({ project, onNavigateTab }: OverviewTabProps
         )}
 
         {/* Actionable Recommendations Checklist */}
-        {auditReport && auditReport.actionableRecommendations.length > 0 && (
+        {auditReport?.actionableRecommendations && auditReport.actionableRecommendations.length > 0 && (
           <div className="rounded-2xl bg-white/5 border border-white/10 p-5 backdrop-blur-sm space-y-3">
             <div className="flex items-center gap-2">
               <CheckCircle2 className="h-4 w-4 text-[#ffb241]" />

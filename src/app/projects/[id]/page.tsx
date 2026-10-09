@@ -266,29 +266,22 @@ export default function ProjectDossierPage({ params }: PageProps) {
 
           {/* Action Buttons Bar */}
           <div className="flex flex-wrap items-center gap-3 pt-2">
-            {project.contractDocument?.contractAgreementUrl ? (
-              <a
-                href={project.contractDocument.contractAgreementUrl}
-                target="_blank"
-                rel="noopener noreferrer"
-                className="inline-flex items-center gap-2 rounded-full bg-[#ffb241] px-5 py-2.5 text-xs font-black text-[#011438] shadow hover:bg-amber-300 transition"
-              >
-                <FileText className="h-4 w-4" />
-                <span>Contract Agreement (PDF) &rarr;</span>
-              </a>
-            ) : project.contractDocument?.sourcePdfUrl &&
-              !project.contractDocument.sourcePdfUrl.includes('transparency.dpwh.gov.ph') &&
-              project.contractDocument.sourcePdfUrl.startsWith('http') ? (
-              <a
-                href={project.contractDocument.sourcePdfUrl}
-                target="_blank"
-                rel="noopener noreferrer"
-                className="inline-flex items-center gap-2 rounded-full bg-[#ffb241] px-5 py-2.5 text-xs font-black text-[#011438] shadow hover:bg-amber-300 transition"
-              >
-                <FileText className="h-4 w-4" />
-                <span>View Full Contract (PDF) &rarr;</span>
-              </a>
-            ) : null}
+            {/* View Document Button (Opens in new tab) */}
+            <a
+              href={
+                project.contractDocument?.contractAgreementUrl ||
+                (project.contractDocument?.sourcePdfUrl &&
+                project.contractDocument.sourcePdfUrl.startsWith('http')
+                  ? project.contractDocument.sourcePdfUrl
+                  : `https://www.dpwh.gov.ph/dpwh/business/procurement/civil-works/contract/${encodeURIComponent(project.id)}`)
+              }
+              target="_blank"
+              rel="noopener noreferrer"
+              className="inline-flex items-center gap-2 rounded-full bg-[#ffb241] px-5 py-2.5 text-xs font-black text-[#011438] shadow hover:bg-amber-300 transition"
+            >
+              <FileText className="h-4 w-4" />
+              <span>View Document &rarr;</span>
+            </a>
 
             <button
               onClick={handleShare}

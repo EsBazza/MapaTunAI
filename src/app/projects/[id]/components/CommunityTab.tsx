@@ -67,41 +67,41 @@ export default function CommunityTab({ project, onReviewSubmitted }: CommunityTa
 
   return (
     <div className="space-y-6">
-      {/* 1. Eyewitness Report Action Banner */}
-      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 rounded-xl border border-slate-800 bg-slate-900/60 p-4 sm:p-5 shadow-lg">
+      {/* 1. Eyewitness Report Action Banner (Matches OverviewTab Aesthetic) */}
+      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 rounded-3xl border border-gray-200/80 bg-white p-6 sm:p-7 shadow-sm">
         <div className="flex items-center gap-3.5">
-          <div className="flex h-11 w-11 items-center justify-center rounded-xl bg-[#01367d] text-[#ffb241] shrink-0 shadow-sm">
-            <Camera className="h-5 w-5" />
+          <div className="flex h-12 w-12 items-center justify-center rounded-2xl bg-[#01367d] text-[#ffb241] shrink-0 shadow-sm">
+            <Camera className="h-6 w-6" />
           </div>
           <div>
-            <h4 className="text-sm font-bold text-white">Have you inspected this project site?</h4>
-            <p className="text-xs text-slate-400 mt-0.5">
+            <h4 className="text-base font-black text-[#01367d] tracking-tight">Have you inspected this project site?</h4>
+            <p className="text-xs text-gray-500 font-medium mt-0.5">
               Submit an eyewitness report with ground photos to verify actual construction progress.
             </p>
           </div>
         </div>
         <button
           onClick={() => setIsReviewModalOpen(true)}
-          className="inline-flex items-center justify-center gap-2 rounded-xl bg-[#ffb241] px-5 py-2.5 text-xs font-black text-[#011438] hover:bg-amber-300 transition shadow shrink-0"
+          className="inline-flex items-center justify-center gap-2 rounded-full bg-[#01367d] px-6 py-2.5 text-xs font-black text-white hover:bg-[#ffb241] hover:text-[#011438] transition shadow-md shrink-0"
         >
           <Camera className="h-4 w-4" />
           <span>Submit Eyewitness Report</span>
         </button>
       </div>
 
-      {/* 2. Quick Metrics Grid (2 Prominent Cards) */}
-      <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+      {/* 2. Quick Metrics Grid (2 Prominent Cards matching OverviewTab) */}
+      <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
         {/* Star Rating Breakdown */}
-        <div className="rounded-xl border border-slate-800 bg-slate-900/60 p-5 shadow-lg">
-          <div className="flex items-center gap-2 mb-3">
-            <Star className="h-4 w-4 text-[#ffb241] fill-[#ffb241]" />
-            <h4 className="text-xs font-semibold uppercase tracking-wider text-slate-400">
+        <div className="rounded-3xl border border-gray-200/80 bg-white p-6 sm:p-7 shadow-sm space-y-4">
+          <div className="flex items-center gap-2 border-b border-gray-100 pb-3">
+            <Star className="h-5 w-5 text-[#ffb241] fill-[#ffb241]" />
+            <h4 className="text-xs font-mono font-bold uppercase tracking-wider text-gray-400">
               Community Satisfaction
             </h4>
           </div>
 
-          <div className="flex items-baseline gap-3 mb-3">
-            <span className="text-3xl font-extrabold text-white">
+          <div className="flex items-baseline gap-3 mb-1">
+            <span className="text-3xl font-black text-[#01367d]">
               {avgRating.toFixed(1)}
             </span>
             <div className="flex items-center gap-0.5">
@@ -111,25 +111,25 @@ export default function CommunityTab({ project, onReviewSubmitted }: CommunityTa
                   className={`h-4 w-4 ${
                     s <= Math.round(avgRating)
                       ? 'text-[#ffb241] fill-[#ffb241]'
-                      : 'text-slate-700'
+                      : 'text-gray-200'
                   }`}
                 />
               ))}
             </div>
-            <span className="text-xs text-slate-500">({totalReviews} reviews)</span>
+            <span className="text-xs font-mono text-gray-400">({totalReviews} reviews)</span>
           </div>
 
-          <div className="space-y-1.5">
+          <div className="space-y-2">
             {starCounts.map((sc) => (
-              <div key={sc.stars} className="flex items-center gap-2 text-xs">
-                <span className="w-4 text-slate-400">{sc.stars}★</span>
-                <div className="h-1.5 flex-1 rounded-full bg-slate-800 overflow-hidden">
+              <div key={sc.stars} className="flex items-center gap-2.5 text-xs">
+                <span className="w-5 font-mono text-gray-500 font-bold">{sc.stars}★</span>
+                <div className="h-2 flex-1 rounded-full bg-gray-100 overflow-hidden">
                   <div
-                    className="h-full rounded-full bg-[#ffb241]"
+                    className="h-full rounded-full bg-[#ffb241] transition-all"
                     style={{ width: `${sc.pct}%` }}
                   />
                 </div>
-                <span className="w-6 text-right text-[10px] text-slate-500">
+                <span className="w-8 text-right text-[11px] font-mono text-gray-400">
                   {sc.count}
                 </span>
               </div>
@@ -138,39 +138,39 @@ export default function CommunityTab({ project, onReviewSubmitted }: CommunityTa
         </div>
 
         {/* Physical Progress Perception Contrast */}
-        <div className="rounded-xl border border-slate-800 bg-slate-900/60 p-5 shadow-lg flex flex-col justify-between">
+        <div className="rounded-3xl border border-gray-200/80 bg-white p-6 sm:p-7 shadow-sm flex flex-col justify-between space-y-4">
           <div>
-            <div className="flex items-center gap-2 mb-3">
-              <Users className="h-4 w-4 text-[#ffb241]" />
-              <h4 className="text-xs font-semibold uppercase tracking-wider text-slate-400">
+            <div className="flex items-center gap-2 border-b border-gray-100 pb-3 mb-4">
+              <Users className="h-5 w-5 text-[#01367d]" />
+              <h4 className="text-xs font-mono font-bold uppercase tracking-wider text-gray-400">
                 Ground Reality vs DPWH Claim
               </h4>
             </div>
 
-            <div className="space-y-3">
+            <div className="space-y-4">
               <div>
-                <div className="flex justify-between text-xs mb-1">
-                  <span className="text-slate-400">Official Claimed Progress</span>
-                  <span className="font-bold text-white">{Math.round(project.progress)}%</span>
+                <div className="flex justify-between text-xs font-bold mb-1.5">
+                  <span className="text-gray-500">Official Claimed Progress</span>
+                  <span className="font-mono text-[#01367d] font-black">{Math.round(project.progress)}%</span>
                 </div>
-                <div className="h-2 w-full rounded-full bg-slate-800 overflow-hidden">
+                <div className="h-2.5 w-full rounded-full bg-gray-100 overflow-hidden">
                   <div
-                    className="h-full rounded-full bg-[#01367d]"
+                    className="h-full rounded-full bg-[#01367d] transition-all duration-500"
                     style={{ width: `${Math.min(100, project.progress)}%` }}
                   />
                 </div>
               </div>
 
               <div>
-                <div className="flex justify-between text-xs mb-1">
-                  <span className="text-slate-400">Citizen Perceived Completion</span>
-                  <span className="font-bold text-[#ffb241]">
+                <div className="flex justify-between text-xs font-bold mb-1.5">
+                  <span className="text-gray-500">Citizen Perceived Completion</span>
+                  <span className="font-mono text-emerald-600 font-black">
                     {avgPerceivedProgress !== null ? `${avgPerceivedProgress}%` : 'No data'}
                   </span>
                 </div>
-                <div className="h-2 w-full rounded-full bg-slate-800 overflow-hidden">
+                <div className="h-2.5 w-full rounded-full bg-gray-100 overflow-hidden">
                   <div
-                    className="h-full rounded-full bg-[#ffb241]"
+                    className="h-full rounded-full bg-emerald-500 transition-all duration-500"
                     style={{ width: `${avgPerceivedProgress || 0}%` }}
                   />
                 </div>
@@ -180,24 +180,24 @@ export default function CommunityTab({ project, onReviewSubmitted }: CommunityTa
 
           {avgPerceivedProgress !== null &&
             project.progress - avgPerceivedProgress >= 25 && (
-              <div className="mt-3 flex items-center gap-2 rounded bg-rose-950/40 p-2 text-[11px] text-rose-300 border border-rose-800/40">
-                <AlertCircle className="h-3.5 w-3.5 shrink-0" />
-                <span>Significant divergence between official claim and ground observers.</span>
+              <div className="flex items-center gap-2 rounded-2xl bg-amber-50 border border-amber-200 p-3.5 text-xs font-medium text-amber-900">
+                <AlertCircle className="h-4 w-4 text-amber-600 shrink-0" />
+                <span>Significant divergence detected between official claim and eyewitness ground observers.</span>
               </div>
             )}
         </div>
       </div>
 
-      {/* 2. Reviews Feed */}
+      {/* 3. Verified Eyewitness Reports Feed */}
       <div className="space-y-4">
         <div className="flex items-center justify-between">
-          <h4 className="text-xs font-semibold uppercase tracking-wider text-slate-400">
+          <h4 className="text-xs font-mono font-bold uppercase tracking-wider text-gray-400">
             Verified Eyewitness Reports ({totalReviews})
           </h4>
         </div>
 
         {reviews.length > 0 ? (
-          <div className="space-y-3">
+          <div className="space-y-4">
             {reviews.map((r) => {
               const extraCorroborations = corroborations[r.id] || 0;
               const totalCorroborations = (r.corroborations || 0) + extraCorroborations;
@@ -206,18 +206,18 @@ export default function CommunityTab({ project, onReviewSubmitted }: CommunityTa
               return (
                 <div
                   key={r.id}
-                  className="rounded-xl border border-slate-800 bg-slate-900/40 p-4 shadow transition hover:bg-slate-900/60"
+                  className="rounded-3xl border border-gray-200/80 bg-white p-6 shadow-sm hover:shadow-md transition space-y-3"
                 >
-                  <div className="flex flex-wrap items-center justify-between gap-2 mb-2">
+                  <div className="flex flex-wrap items-center justify-between gap-2">
                     <div className="flex items-center gap-2">
                       <div className="flex items-center gap-0.5">
                         {[1, 2, 3, 4, 5].map((s) => (
                           <Star
                             key={s}
-                            className={`h-3.5 w-3.5 ${
+                            className={`h-4 w-4 ${
                               s <= Math.round(r.rating)
                                 ? 'text-[#ffb241] fill-[#ffb241]'
-                                : 'text-slate-700'
+                                : 'text-gray-200'
                             }`}
                           />
                         ))}
@@ -225,8 +225,8 @@ export default function CommunityTab({ project, onReviewSubmitted }: CommunityTa
 
                       {/* Distance Badge */}
                       {r.distanceKm !== null && r.distanceKm !== undefined && (
-                        <span className="inline-flex items-center gap-1 rounded bg-slate-800 px-2 py-0.5 text-[10px] font-medium text-slate-300 border border-slate-700">
-                          <MapPin className="h-3 w-3 text-[#ffb241]" />
+                        <span className="inline-flex items-center gap-1 rounded-full bg-slate-100 px-2.5 py-0.5 text-[10px] font-mono font-bold text-slate-700 border border-slate-200">
+                          <MapPin className="h-3 w-3 text-[#01367d]" />
                           <span>{formatDistance(r.distanceKm)}</span>
                         </span>
                       )}
@@ -234,10 +234,10 @@ export default function CommunityTab({ project, onReviewSubmitted }: CommunityTa
                       {/* Active Workers Tag */}
                       {r.workersActive !== null && r.workersActive !== undefined && (
                         <span
-                          className={`rounded px-1.5 py-0.5 text-[10px] font-medium ${
+                          className={`rounded-full px-2.5 py-0.5 text-[10px] font-mono font-bold border ${
                             r.workersActive
-                              ? 'bg-emerald-950 text-emerald-400 border border-emerald-800'
-                              : 'bg-rose-950 text-rose-400 border border-rose-800'
+                              ? 'bg-emerald-50 text-emerald-800 border-emerald-200'
+                              : 'bg-rose-50 text-rose-800 border-rose-200'
                           }`}
                         >
                           {r.workersActive ? 'Active Workers' : 'Site Abandoned'}
@@ -245,43 +245,43 @@ export default function CommunityTab({ project, onReviewSubmitted }: CommunityTa
                       )}
                     </div>
 
-                    <span className="text-[11px] text-slate-500">
+                    <span className="text-[11px] font-mono text-gray-400">
                       {formatDate(r.createdAt)}
                     </span>
                   </div>
 
-                  <p className="text-xs text-slate-300 leading-relaxed mb-3">
+                  <p className="text-xs sm:text-sm text-gray-800 leading-relaxed font-medium">
                     {r.comment}
                   </p>
 
                   {/* Photo attachment if available */}
                   {r.photoUrl && (
-                    <div className="mb-3">
+                    <div className="pt-1">
                       <a
                         href={r.photoUrl}
                         target="_blank"
                         rel="noopener noreferrer"
-                        className="inline-block rounded-lg overflow-hidden border border-slate-800 hover:border-[#ffb241] transition"
+                        className="inline-block rounded-2xl overflow-hidden border border-gray-200 hover:border-[#01367d] transition shadow-xs"
                       >
                         {/* eslint-disable-next-line @next/next/no-img-element */}
                         <img
                           src={r.photoUrl}
                           alt="Field inspection photo"
-                          className="h-32 w-48 object-cover"
+                          className="h-36 w-56 object-cover"
                         />
                       </a>
                     </div>
                   )}
 
                   {/* Corroboration Action Button */}
-                  <div className="flex items-center justify-between pt-2 border-t border-slate-800/60 text-xs">
+                  <div className="flex items-center justify-between pt-3 border-t border-gray-100 text-xs">
                     <button
                       onClick={() => handleCorroborate(r.id)}
                       disabled={hasCorroborated}
-                      className={`inline-flex items-center gap-1.5 rounded px-2.5 py-1 text-xs font-semibold transition ${
+                      className={`inline-flex items-center gap-1.5 rounded-full px-3.5 py-1.5 text-xs font-bold transition border ${
                         hasCorroborated
-                          ? 'text-[#ffb241] bg-amber-950/40 cursor-default'
-                          : 'text-slate-400 hover:text-[#ffb241] hover:bg-slate-800'
+                          ? 'text-[#01367d] bg-blue-50 border-blue-200 cursor-default'
+                          : 'text-gray-600 bg-gray-50 border-gray-200 hover:border-[#ffb241] hover:text-[#011438] hover:bg-amber-50/50'
                       }`}
                     >
                       <ThumbsUp className="h-3.5 w-3.5" />
@@ -290,7 +290,7 @@ export default function CommunityTab({ project, onReviewSubmitted }: CommunityTa
                         {totalCorroborations})
                       </span>
                     </button>
-                    <span className="text-[10px] text-slate-500">
+                    <span className="text-[10px] font-mono text-gray-400">
                       Protected by SHA-256 Anti-Spam
                     </span>
                   </div>
@@ -299,18 +299,18 @@ export default function CommunityTab({ project, onReviewSubmitted }: CommunityTa
             })}
           </div>
         ) : (
-          <div className="rounded-xl border border-dashed border-slate-800 p-8 text-center bg-slate-950/40">
-            <MessageSquare className="mx-auto h-8 w-8 text-slate-600 mb-2" />
-            <p className="text-sm font-semibold text-slate-300">
+          <div className="rounded-3xl border border-dashed border-gray-300 p-12 text-center bg-white shadow-sm space-y-2">
+            <MessageSquare className="mx-auto h-10 w-10 text-gray-300 mb-2" />
+            <p className="text-base font-black text-[#01367d]">
               No Citizen Eyewitness Reports Yet
             </p>
-            <p className="text-xs text-slate-500 mt-1 max-w-sm mx-auto mb-4">
-              Are you located near this project site in {project.province?.name}?
+            <p className="text-xs text-gray-500 font-medium max-w-sm mx-auto mb-4">
+              Are you located near this project site in {project.province?.name || 'the area'}?
               Help your community by submitting a photo and rating the construction ground reality.
             </p>
             <button
               onClick={() => setIsReviewModalOpen(true)}
-              className="inline-flex items-center gap-1.5 rounded-lg bg-[#ffb241] px-4 py-2 text-xs font-black text-[#011438] shadow hover:bg-amber-300 transition"
+              className="inline-flex items-center gap-2 rounded-full bg-[#01367d] px-6 py-2.5 text-xs font-black text-white shadow-md hover:bg-[#ffb241] hover:text-[#011438] transition"
             >
               <Camera className="h-4 w-4" />
               <span>Submit First Eyewitness Report</span>
