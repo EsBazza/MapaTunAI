@@ -1,16 +1,14 @@
-﻿'use client';
+'use client';
 
 import { useState, use, useEffect } from 'react';
 import Link from 'next/link';
 import Image from 'next/image';
-import { useRouter } from 'next/navigation';
 import {
   MapPin,
   Building2,
   Calendar,
   Share2,
   ExternalLink,
-  FileQuestion,
   FileText,
   Loader2,
   ChevronRight,
@@ -20,21 +18,16 @@ import { useProject } from '@/hooks/use-projects';
 import { formatCurrency, formatDate, cleanContractorName } from '@/lib/format';
 import { getRiskScoreTier } from '@/lib/anomaly-flags';
 import OverviewTab from './components/OverviewTab';
-import SatelliteTab from './components/SatelliteTab';
-import NewsTab from './components/NewsTab';
-import FinancialsTab from './components/FinancialsTab';
 import CommunityTab from './components/CommunityTab';
-import ConnectionsTab from './components/ConnectionsTab';
 
 interface PageProps {
   params: Promise<{ id: string }>;
 }
 
-type TabType = 'overview' | 'satellite' | 'news' | 'financials' | 'community' | 'connections';
+type TabType = 'overview' | 'community';
 
 export default function ProjectDossierPage({ params }: PageProps) {
   const { id } = use(params);
-  const router = useRouter();
   const { data: project, isLoading, error, refetch } = useProject(id);
 
   const [activeTab, setActiveTab] = useState<TabType>('overview');
@@ -44,24 +37,19 @@ export default function ProjectDossierPage({ params }: PageProps) {
   useEffect(() => {
     if (typeof window !== 'undefined' && window.location.hash) {
       const hash = window.location.hash.replace('#', '') as TabType;
-      const validTabs: TabType[] = [
-        'overview',
-        'satellite',
-        'news',
-        'financials',
-        'community',
-        'connections',
-      ];
+      const validTabs: TabType[] = ['overview', 'community'];
       if (validTabs.includes(hash)) {
-        setActiveTab(hash);
+        setTimeout(() => setActiveTab(hash), 0);
       }
     }
   }, []);
 
   const handleTabChange = (tab: TabType) => {
-    setActiveTab(tab);
-    if (typeof window !== 'undefined') {
-      window.history.replaceState(null, '', `#${tab}`);
+    if (tab === 'overview' || tab === 'community') {
+      setActiveTab(tab);
+      if (typeof window !== 'undefined') {
+        window.history.replaceState(null, '', `#${tab}`);
+      }
     }
   };
 
@@ -111,11 +99,7 @@ export default function ProjectDossierPage({ params }: PageProps) {
 
   const tabs: Array<{ id: TabType; label: string; count?: number }> = [
     { id: 'overview', label: 'Overview' },
-    { id: 'satellite', label: 'Satellite Verification' },
-    { id: 'financials', label: 'Financials & BOQ' },
-    { id: 'news', label: 'News & Media' },
     { id: 'community', label: 'Citizen Reports', count: project.reviews?.length || 0 },
-    { id: 'connections', label: 'Alliance & Network' },
   ];
 
   return (
@@ -201,10 +185,15 @@ export default function ProjectDossierPage({ params }: PageProps) {
               {project.name}
             </h1>
             <div className="flex flex-wrap items-center gap-5 text-xs text-white/80 mt-3 font-semibold">
-              <div className="flex items-center gap-1.5 text-white">
+              <Link
+                href={`/contractors?q=${encodeURIComponent(contractorName)}`}
+                className="inline-flex items-center gap-1.5 text-white hover:text-[#ffb241] transition group"
+                title="View Contractor Profile in Registry"
+              >
                 <Building2 className="h-4 w-4 text-[#ffb241]" />
-                <span className="text-sm font-bold">{contractorName}</span>
-              </div>
+                <span className="text-sm font-bold group-hover:underline">{contractorName}</span>
+                <ExternalLink className="h-3 w-3 text-white/50 group-hover:text-[#ffb241]" />
+              </Link>
               <div className="flex items-center gap-1.5">
                 <Calendar className="h-4 w-4 text-white/60" />
                 <span>
@@ -299,25 +288,7 @@ export default function ProjectDossierPage({ params }: PageProps) {
                 <FileText className="h-4 w-4" />
                 <span>View Full Contract (PDF) &rarr;</span>
               </a>
-            ) : (
-              <button
-                onClick={() => handleTabChange('financials')}
-                className="inline-flex items-center gap-2 rounded-full bg-[#ffb241] px-5 py-2.5 text-xs font-black text-[#011438] shadow hover:bg-amber-300 transition"
-              >
-                <FileText className="h-4 w-4" />
-                <span>View Contract &amp; BOQ</span>
-              </button>
-            )}
-
-            <a
-              href={`https://www.dpwh.gov.ph/dpwh/business/procurement/civil-works/contract/${encodeURIComponent(project.id)}`}
-              target="_blank"
-              rel="noopener noreferrer"
-              className="inline-flex items-center gap-2 rounded-full border border-white/20 bg-white/10 px-4 py-2.5 text-xs font-bold text-white hover:bg-white/20 transition"
-            >
-              <Building2 className="h-4 w-4 text-[#ffb241]" />
-              <span>DPWH Civil Works Portal &rarr;</span>
-            </a>
+            ) : null}
 
             <button
               onClick={handleShare}
@@ -326,16 +297,6 @@ export default function ProjectDossierPage({ params }: PageProps) {
               <Share2 className="h-4 w-4" />
               <span>{copied ? 'Link Copied!' : 'Share Dossier'}</span>
             </button>
-
-            <a
-              href="https://www.foi.gov.ph/"
-              target="_blank"
-              rel="noopener noreferrer"
-              className="inline-flex items-center gap-2 rounded-full border border-white/20 bg-white/10 px-4 py-2.5 text-xs font-bold text-white hover:bg-white/20 transition"
-            >
-              <FileQuestion className="h-4 w-4 text-[#ffb241]" />
-              <span>File FOI Request &rarr;</span>
-            </a>
           </div>
         </div>
       </div>
@@ -381,24 +342,8 @@ export default function ProjectDossierPage({ params }: PageProps) {
           <OverviewTab project={project} onNavigateTab={(tab) => handleTabChange(tab as TabType)} />
         </div>
 
-        <div className={activeTab === 'satellite' ? 'block' : 'hidden'}>
-          <SatelliteTab project={project} />
-        </div>
-
-        <div className={activeTab === 'financials' ? 'block' : 'hidden'}>
-          <FinancialsTab project={project} />
-        </div>
-
-        <div className={activeTab === 'news' ? 'block' : 'hidden'}>
-          <NewsTab project={project} />
-        </div>
-
         <div className={activeTab === 'community' ? 'block' : 'hidden'}>
           <CommunityTab project={project} onReviewSubmitted={() => refetch()} />
-        </div>
-
-        <div className={activeTab === 'connections' ? 'block' : 'hidden'}>
-          <ConnectionsTab project={project} />
         </div>
       </main>
 

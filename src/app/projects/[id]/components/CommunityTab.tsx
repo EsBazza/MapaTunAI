@@ -3,14 +3,11 @@
 import { useState } from 'react';
 import {
   Star,
-  ShieldCheck,
   MapPin,
   ThumbsUp,
   MessageSquare,
   Users,
   Camera,
-  CheckCircle2,
-  HardHat,
   AlertCircle,
 } from 'lucide-react';
 import { formatDate, formatDistance } from '@/lib/format';
@@ -47,13 +44,6 @@ export default function CommunityTab({ project, onReviewSubmitted }: CommunityTa
       ? Math.round(progressRatings.reduce((a, b) => a + b, 0) / progressRatings.length)
       : null;
 
-  // Workforce presence
-  const activeWorkerVotes = reviews.filter((r) => r.workersActive === true).length;
-  const abandonedVotes = reviews.filter((r) => r.workersActive === false).length;
-  const totalWorkerVotes = activeWorkerVotes + abandonedVotes;
-  const activePct =
-    totalWorkerVotes > 0 ? Math.round((activeWorkerVotes / totalWorkerVotes) * 100) : null;
-
   const handleCorroborate = async (reviewId: string) => {
     if (corroboratedSet.has(reviewId)) return;
 
@@ -77,12 +67,34 @@ export default function CommunityTab({ project, onReviewSubmitted }: CommunityTa
 
   return (
     <div className="space-y-6">
-      {/* 1. Header & Quick Metrics Grid */}
-      <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+      {/* 1. Eyewitness Report Action Banner */}
+      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 rounded-xl border border-slate-800 bg-slate-900/60 p-4 sm:p-5 shadow-lg">
+        <div className="flex items-center gap-3.5">
+          <div className="flex h-11 w-11 items-center justify-center rounded-xl bg-[#01367d] text-[#ffb241] shrink-0 shadow-sm">
+            <Camera className="h-5 w-5" />
+          </div>
+          <div>
+            <h4 className="text-sm font-bold text-white">Have you inspected this project site?</h4>
+            <p className="text-xs text-slate-400 mt-0.5">
+              Submit an eyewitness report with ground photos to verify actual construction progress.
+            </p>
+          </div>
+        </div>
+        <button
+          onClick={() => setIsReviewModalOpen(true)}
+          className="inline-flex items-center justify-center gap-2 rounded-xl bg-[#ffb241] px-5 py-2.5 text-xs font-black text-[#011438] hover:bg-amber-300 transition shadow shrink-0"
+        >
+          <Camera className="h-4 w-4" />
+          <span>Submit Eyewitness Report</span>
+        </button>
+      </div>
+
+      {/* 2. Quick Metrics Grid (2 Prominent Cards) */}
+      <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
         {/* Star Rating Breakdown */}
         <div className="rounded-xl border border-slate-800 bg-slate-900/60 p-5 shadow-lg">
           <div className="flex items-center gap-2 mb-3">
-            <Star className="h-4 w-4 text-amber-400 fill-amber-400" />
+            <Star className="h-4 w-4 text-[#ffb241] fill-[#ffb241]" />
             <h4 className="text-xs font-semibold uppercase tracking-wider text-slate-400">
               Community Satisfaction
             </h4>
@@ -98,7 +110,7 @@ export default function CommunityTab({ project, onReviewSubmitted }: CommunityTa
                   key={s}
                   className={`h-4 w-4 ${
                     s <= Math.round(avgRating)
-                      ? 'text-amber-400 fill-amber-400'
+                      ? 'text-[#ffb241] fill-[#ffb241]'
                       : 'text-slate-700'
                   }`}
                 />
@@ -113,7 +125,7 @@ export default function CommunityTab({ project, onReviewSubmitted }: CommunityTa
                 <span className="w-4 text-slate-400">{sc.stars}★</span>
                 <div className="h-1.5 flex-1 rounded-full bg-slate-800 overflow-hidden">
                   <div
-                    className="h-full rounded-full bg-amber-400"
+                    className="h-full rounded-full bg-[#ffb241]"
                     style={{ width: `${sc.pct}%` }}
                   />
                 </div>
@@ -129,7 +141,7 @@ export default function CommunityTab({ project, onReviewSubmitted }: CommunityTa
         <div className="rounded-xl border border-slate-800 bg-slate-900/60 p-5 shadow-lg flex flex-col justify-between">
           <div>
             <div className="flex items-center gap-2 mb-3">
-              <Users className="h-4 w-4 text-cyan-400" />
+              <Users className="h-4 w-4 text-[#ffb241]" />
               <h4 className="text-xs font-semibold uppercase tracking-wider text-slate-400">
                 Ground Reality vs DPWH Claim
               </h4>
@@ -143,7 +155,7 @@ export default function CommunityTab({ project, onReviewSubmitted }: CommunityTa
                 </div>
                 <div className="h-2 w-full rounded-full bg-slate-800 overflow-hidden">
                   <div
-                    className="h-full rounded-full bg-cyan-500"
+                    className="h-full rounded-full bg-[#01367d]"
                     style={{ width: `${Math.min(100, project.progress)}%` }}
                   />
                 </div>
@@ -152,13 +164,13 @@ export default function CommunityTab({ project, onReviewSubmitted }: CommunityTa
               <div>
                 <div className="flex justify-between text-xs mb-1">
                   <span className="text-slate-400">Citizen Perceived Completion</span>
-                  <span className="font-bold text-amber-400">
+                  <span className="font-bold text-[#ffb241]">
                     {avgPerceivedProgress !== null ? `${avgPerceivedProgress}%` : 'No data'}
                   </span>
                 </div>
                 <div className="h-2 w-full rounded-full bg-slate-800 overflow-hidden">
                   <div
-                    className="h-full rounded-full bg-amber-400"
+                    className="h-full rounded-full bg-[#ffb241]"
                     style={{ width: `${avgPerceivedProgress || 0}%` }}
                   />
                 </div>
@@ -168,49 +180,11 @@ export default function CommunityTab({ project, onReviewSubmitted }: CommunityTa
 
           {avgPerceivedProgress !== null &&
             project.progress - avgPerceivedProgress >= 25 && (
-              <div className="mt-3 rounded bg-rose-950/40 p-2 text-[11px] text-rose-300 border border-rose-800/40">
-                ⚠️ Significant divergence between official claim and ground observers.
+              <div className="mt-3 flex items-center gap-2 rounded bg-rose-950/40 p-2 text-[11px] text-rose-300 border border-rose-800/40">
+                <AlertCircle className="h-3.5 w-3.5 shrink-0" />
+                <span>Significant divergence between official claim and ground observers.</span>
               </div>
             )}
-        </div>
-
-        {/* Workforce Presence Indicator */}
-        <div className="rounded-xl border border-slate-800 bg-slate-900/60 p-5 shadow-lg flex flex-col justify-between">
-          <div>
-            <div className="flex items-center gap-2 mb-3">
-              <HardHat className="h-4 w-4 text-emerald-400" />
-              <h4 className="text-xs font-semibold uppercase tracking-wider text-slate-400">
-                Active Workers on Site
-              </h4>
-            </div>
-
-            {totalWorkerVotes > 0 ? (
-              <div>
-                <div className="text-2xl font-black text-white mb-1">
-                  {activePct}%{' '}
-                  <span className="text-xs font-normal text-slate-400">
-                    report active workers
-                  </span>
-                </div>
-                <p className="text-xs text-slate-400 mt-2">
-                  {activeWorkerVotes} citizens observed workers present, while{' '}
-                  {abandonedVotes} reported an abandoned or vacant job site.
-                </p>
-              </div>
-            ) : (
-              <div className="text-xs text-slate-400">
-                No workforce presence data logged yet. Be the first eyewitness to submit a report.
-              </div>
-            )}
-          </div>
-
-          <button
-            onClick={() => setIsReviewModalOpen(true)}
-            className="mt-4 inline-flex items-center justify-center gap-1.5 w-full rounded-lg bg-cyan-600 px-3.5 py-2 text-xs font-semibold text-white shadow hover:bg-cyan-500 transition"
-          >
-            <Camera className="h-4 w-4" />
-            <span>Submit Eyewitness Report</span>
-          </button>
         </div>
       </div>
 
@@ -242,7 +216,7 @@ export default function CommunityTab({ project, onReviewSubmitted }: CommunityTa
                             key={s}
                             className={`h-3.5 w-3.5 ${
                               s <= Math.round(r.rating)
-                                ? 'text-amber-400 fill-amber-400'
+                                ? 'text-[#ffb241] fill-[#ffb241]'
                                 : 'text-slate-700'
                             }`}
                           />
@@ -252,16 +226,8 @@ export default function CommunityTab({ project, onReviewSubmitted }: CommunityTa
                       {/* Distance Badge */}
                       {r.distanceKm !== null && r.distanceKm !== undefined && (
                         <span className="inline-flex items-center gap-1 rounded bg-slate-800 px-2 py-0.5 text-[10px] font-medium text-slate-300 border border-slate-700">
-                          <MapPin className="h-3 w-3 text-cyan-400" />
+                          <MapPin className="h-3 w-3 text-[#ffb241]" />
                           <span>{formatDistance(r.distanceKm)}</span>
-                        </span>
-                      )}
-
-                      {/* Phone Verified Badge */}
-                      {r.phoneVerified && (
-                        <span className="inline-flex items-center gap-1 rounded bg-emerald-950/60 px-2 py-0.5 text-[10px] font-medium text-emerald-300 border border-emerald-800">
-                          <ShieldCheck className="h-3 w-3" />
-                          <span>SMS Verified</span>
                         </span>
                       )}
 
@@ -295,7 +261,7 @@ export default function CommunityTab({ project, onReviewSubmitted }: CommunityTa
                         href={r.photoUrl}
                         target="_blank"
                         rel="noopener noreferrer"
-                        className="inline-block rounded-lg overflow-hidden border border-slate-800 hover:border-cyan-500 transition"
+                        className="inline-block rounded-lg overflow-hidden border border-slate-800 hover:border-[#ffb241] transition"
                       >
                         {/* eslint-disable-next-line @next/next/no-img-element */}
                         <img
@@ -314,8 +280,8 @@ export default function CommunityTab({ project, onReviewSubmitted }: CommunityTa
                       disabled={hasCorroborated}
                       className={`inline-flex items-center gap-1.5 rounded px-2.5 py-1 text-xs font-semibold transition ${
                         hasCorroborated
-                          ? 'text-cyan-400 bg-cyan-950/40 cursor-default'
-                          : 'text-slate-400 hover:text-cyan-300 hover:bg-slate-800'
+                          ? 'text-[#ffb241] bg-amber-950/40 cursor-default'
+                          : 'text-slate-400 hover:text-[#ffb241] hover:bg-slate-800'
                       }`}
                     >
                       <ThumbsUp className="h-3.5 w-3.5" />
@@ -344,7 +310,7 @@ export default function CommunityTab({ project, onReviewSubmitted }: CommunityTa
             </p>
             <button
               onClick={() => setIsReviewModalOpen(true)}
-              className="inline-flex items-center gap-1.5 rounded-lg bg-cyan-600 px-4 py-2 text-xs font-semibold text-white shadow hover:bg-cyan-500 transition"
+              className="inline-flex items-center gap-1.5 rounded-lg bg-[#ffb241] px-4 py-2 text-xs font-black text-[#011438] shadow hover:bg-amber-300 transition"
             >
               <Camera className="h-4 w-4" />
               <span>Submit First Eyewitness Report</span>

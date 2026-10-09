@@ -1,4 +1,4 @@
-﻿'use client';
+'use client';
 
 import { useState, useEffect, useCallback } from 'react';
 import { isWithinReviewRadius, MAX_REVIEW_RADIUS_KM } from '@/lib/geo';
@@ -30,9 +30,6 @@ export default function ReviewModal({
   const [photoUrl, setPhotoUrl] = useState<string>('');
   const [previewUrl, setPreviewUrl] = useState<string | null>(null);
   const [isUploadingPhoto, setIsUploadingPhoto] = useState<boolean>(false);
-  const [phone, setPhone] = useState<string>('');
-  const [otp, setOtp] = useState<string>('');
-  const [otpSent, setOtpSent] = useState<boolean>(false);
   const [isSubmitting, setIsSubmitting] = useState<boolean>(false);
   const [errorMsg, setErrorMsg] = useState<string | null>(null);
 
@@ -76,7 +73,6 @@ export default function ReviewModal({
       const timer = setTimeout(() => {
         requestGeolocation();
         setErrorMsg(null);
-        setOtpSent(false);
         setPhotoUrl('');
         setPreviewUrl(null);
         setIsUploadingPhoto(false);
@@ -152,36 +148,6 @@ export default function ReviewModal({
 
   const isEligibleByDistance = geoCheck ? geoCheck.isWithin : false;
 
-  const handleSendOtp = async () => {
-    setErrorMsg(null);
-    if (!phone || phone.trim().length < 10) {
-      setErrorMsg('Please enter a valid Philippine mobile number (+63...)');
-      return;
-    }
-
-    if (!isEligibleByDistance) {
-      setErrorMsg(`You must be within ${MAX_REVIEW_RADIUS_KM} km of the project site to request an OTP and submit a rating.`);
-      return;
-    }
-
-    try {
-      const res = await fetch('/api/report/otp', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ phone: phone.trim(), projectId }),
-      });
-
-      const data = await res.json();
-      if (res.ok) {
-        setOtpSent(true);
-      } else {
-        setErrorMsg(data.error || 'Failed to dispatch OTP. (Use Demo +639000000000)');
-      }
-    } catch {
-      setErrorMsg('Network error while requesting verification OTP.');
-    }
-  };
-
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setErrorMsg(null);
@@ -202,10 +168,6 @@ export default function ReviewModal({
       setErrorMsg('Please enter your observations or feedback.');
       return;
     }
-    if (!otp.trim()) {
-      setErrorMsg('Please enter the 6-digit verification code.');
-      return;
-    }
 
     setIsSubmitting(true);
     try {
@@ -220,8 +182,6 @@ export default function ReviewModal({
           workersActive,
           comment,
           photoUrl: photoUrl.trim() || undefined,
-          phone: phone.trim(),
-          otp: otp.trim(),
           userLat,
           userLng,
         }),
@@ -485,46 +445,6 @@ export default function ReviewModal({
             )}
           </div>
 
-          {/* Phone Verification Section (1 OTP = 1 Review) */}
-          <div className="rounded-xl border border-blue-100 bg-blue-50/60 p-3.5 space-y-3">
-            <div className="flex items-center justify-between">
-              <div>
-                <span className="font-bold text-blue-900">Anti-Fraud Phone Verification</span>
-                <p className="text-[10px] text-blue-700 mt-0.5">1 OTP code = 1 review per project</p>
-              </div>
-            </div>
-
-            <div className="flex items-center gap-2">
-              <input
-                type="tel"
-                value={phone}
-                onChange={(e) => setPhone(e.target.value)}
-                placeholder="+639171234567"
-                className="w-full rounded-lg border border-gray-300 bg-white p-2 text-xs text-gray-900"
-              />
-              <button
-                type="button"
-                onClick={handleSendOtp}
-                disabled={!isEligibleByDistance}
-                className="shrink-0 rounded-lg bg-blue-600 px-3 py-2 text-xs font-bold text-white shadow hover:bg-blue-700 transition disabled:opacity-50 disabled:cursor-not-allowed"
-                title={!isEligibleByDistance ? 'Must be within 15 km of project to request OTP' : ''}
-              >
-                {otpSent ? 'Resend OTP' : 'Send OTP'}
-              </button>
-            </div>
-
-            <div>
-              <input
-                type="text"
-                value={otp}
-                onChange={(e) => setOtp(e.target.value)}
-                placeholder="Enter 6-digit OTP code"
-                maxLength={6}
-                className="w-full rounded-lg border border-gray-300 bg-white p-2 text-xs text-gray-900 font-mono tracking-widest text-center font-bold"
-              />
-            </div>
-          </div>
-
           <div className="flex items-center justify-end gap-2 pt-2 border-t border-gray-100">
             <button
               type="button"
@@ -536,15 +456,15 @@ export default function ReviewModal({
             <button
               type="submit"
               disabled={isSubmitting || isUploadingPhoto || !isEligibleByDistance}
-              className="rounded-xl bg-blue-600 px-5 py-2 text-xs font-bold text-white shadow hover:bg-blue-700 transition disabled:opacity-50 disabled:cursor-not-allowed"
+              className="rounded-xl bg-[#01367d] px-5 py-2 text-xs font-bold text-white shadow hover:bg-[#ffb241] hover:text-[#011438] transition disabled:opacity-50 disabled:cursor-not-allowed"
             >
               {isSubmitting
-                ? 'Verifying & Submitting...'
+                ? 'Submitting Report...'
                 : isUploadingPhoto
                 ? 'Uploading Photo...'
                 : !isEligibleByDistance
                 ? 'Location Restricted (> 15 km)'
-                : 'Submit Verified Review'}
+                : 'Submit Eyewitness Report'}
             </button>
           </div>
         </form>

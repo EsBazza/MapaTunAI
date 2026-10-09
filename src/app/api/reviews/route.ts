@@ -59,14 +59,13 @@ export async function POST(request: NextRequest) {
       userLng,
     } = body;
 
-    if (!projectId || rating === undefined || !comment || !phone || !otp) {
+    if (!projectId || rating === undefined || !comment) {
       return Response.json(
-        { error: 'Missing required fields (projectId, rating, comment, phone, otp)' },
+        { error: 'Missing required fields (projectId, rating, comment)' },
         { status: 400 }
       );
     }
 
-    const trimmedPhone = phone.trim();
     const numericRating = Math.max(1, Math.min(5, Number(rating)));
 
     // 1. Fetch Project Details for Location Verification
@@ -117,60 +116,67 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    // 3. Enforce 1 Review per Phone per Project
-    const phoneHash = crypto.createHash('sha256').update(trimmedPhone).digest('hex');
-
-    const existingReview = await prisma.review.findFirst({
-      where: {
-        projectId,
-        phoneHash,
-      },
-    });
-
-    if (existingReview) {
-      return Response.json(
-        {
-          error:
-            'This phone number has already submitted a review for this project. Only 1 rating per project is allowed.',
-        },
-        { status: 400 }
-      );
-    }
-
-    // 4. Verify OTP (1 OTP = 1 Review)
-    const isDemo =
-      process.env.DEMO_OTP_BYPASS === 'true' &&
-      process.env.NODE_ENV !== 'production' &&
-      (trimmedPhone === '+639000000000' || otp === '123456');
+    // 3. Handle Phone & OTP (Optional)
+    let phoneHash: string;
     let phoneVerified = false;
 
-    if (isDemo) {
-      phoneVerified = true;
-    } else {
-      const validOtp = await prisma.otpCode.findFirst({
+    if (phone && typeof phone === 'string' && phone.trim()) {
+      const trimmedPhone = phone.trim();
+      phoneHash = crypto.createHash('sha256').update(trimmedPhone).digest('hex');
+
+      const existingReview = await prisma.review.findFirst({
         where: {
-          phone: trimmedPhone,
-          code: otp.trim(),
-          used: false,
-          expiresAt: { gt: new Date() },
-          OR: [{ projectId: null }, { projectId: projectId }],
+          projectId,
+          phoneHash,
         },
-        orderBy: { createdAt: 'desc' },
       });
 
-      if (!validOtp) {
+      if (existingReview) {
         return Response.json(
-          { error: 'Invalid, expired, or already used OTP code.' },
+          {
+            error:
+              'This phone number has already submitted a review for this project. Only 1 rating per project is allowed.',
+          },
           { status: 400 }
         );
       }
 
-      // Mark OTP as used immediately
-      await prisma.otpCode.update({
-        where: { id: validOtp.id },
-        data: { used: true },
-      });
-      phoneVerified = true;
+      if (otp && typeof otp === 'string' && otp.trim()) {
+        const isDemo =
+          process.env.DEMO_OTP_BYPASS === 'true' &&
+          process.env.NODE_ENV !== 'production' &&
+          (trimmedPhone === '+639000000000' || otp === '123456');
+
+        if (isDemo) {
+          phoneVerified = true;
+        } else {
+          const validOtp = await prisma.otpCode.findFirst({
+            where: {
+              phone: trimmedPhone,
+              code: otp.trim(),
+              used: false,
+              expiresAt: { gt: new Date() },
+              OR: [{ projectId: null }, { projectId: projectId }],
+            },
+            orderBy: { createdAt: 'desc' },
+          });
+
+          if (validOtp) {
+            await prisma.otpCode.update({
+              where: { id: validOtp.id },
+              data: { used: true },
+            });
+            phoneVerified = true;
+          }
+        }
+      }
+    } else {
+      // Anonymous submission without phone
+      phoneHash = crypto
+        .createHash('sha256')
+        .update(`anon-${Date.now()}-${Math.random()}-${projectId}`)
+        .digest('hex');
+      phoneVerified = false;
     }
 
     // 5. Create Review Record
