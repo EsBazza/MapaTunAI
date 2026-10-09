@@ -16,15 +16,38 @@ export async function GET(request: NextRequest) {
     const order = searchParams.get('order') ?? 'desc';
     const q = searchParams.get('q') ?? searchParams.get('search');
 
+    const contractor = searchParams.get('contractor');
+
     const where: Prisma.ProjectWhereInput = {};
 
+    if (contractor) {
+      where.contractorRaw = { contains: contractor, mode: 'insensitive' };
+    }
+
     if (q) {
-      where.OR = [
-        { name: { contains: q, mode: 'insensitive' } },
-        { id: { contains: q, mode: 'insensitive' } },
-        { contractorRaw: { contains: q, mode: 'insensitive' } },
-        { province: { name: { contains: q, mode: 'insensitive' } } },
-      ];
+      const tokens = q.trim().split(/\s+/).filter(Boolean);
+      if (tokens.length === 1) {
+        const token = tokens[0];
+        where.OR = [
+          { name: { contains: token, mode: 'insensitive' } },
+          { id: { contains: token, mode: 'insensitive' } },
+          { contractorRaw: { contains: token, mode: 'insensitive' } },
+          { category: { contains: token, mode: 'insensitive' } },
+          { province: { name: { contains: token, mode: 'insensitive' } } },
+          { province: { region: { name: { contains: token, mode: 'insensitive' } } } },
+        ];
+      } else if (tokens.length > 1) {
+        where.AND = tokens.map((token) => ({
+          OR: [
+            { name: { contains: token, mode: 'insensitive' } },
+            { id: { contains: token, mode: 'insensitive' } },
+            { contractorRaw: { contains: token, mode: 'insensitive' } },
+            { category: { contains: token, mode: 'insensitive' } },
+            { province: { name: { contains: token, mode: 'insensitive' } } },
+            { province: { region: { name: { contains: token, mode: 'insensitive' } } } },
+          ],
+        }));
+      }
     }
 
     if (province || region) {
