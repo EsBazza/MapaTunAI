@@ -22,6 +22,36 @@ interface ChoroplethStat {
   avgProgress: number;
 }
 
+// --- Helper to generate circular GeoJSON polygon ---
+function createGeoJSONCircle(center: [number, number], radiusKm = 5.0, points = 64) {
+  const [lng, lat] = center;
+  const coords: [number, number][] = [];
+  const distanceX = radiusKm / (111.32 * Math.cos((lat * Math.PI) / 180));
+  const distanceY = radiusKm / 110.574;
+
+  for (let i = 0; i < points; i++) {
+    const theta = (i / points) * (2 * Math.PI);
+    const x = distanceX * Math.cos(theta);
+    const y = distanceY * Math.sin(theta);
+    coords.push([lng + x, lat + y]);
+  }
+  coords.push(coords[0]); // close polygon
+
+  return {
+    type: 'FeatureCollection' as const,
+    features: [
+      {
+        type: 'Feature' as const,
+        geometry: {
+          type: 'Polygon' as const,
+          coordinates: [coords],
+        },
+        properties: {},
+      },
+    ],
+  };
+}
+
 // --- Main Map Content ---------------------------------------
 function MapContent() {
   const searchParams = useSearchParams();
@@ -52,6 +82,10 @@ function MapContent() {
 
   // Sidebar projects
   const [sidebarProjects, setSidebarProjects] = useState<any[]>([]);
+
+  // Near Me 5km radar polygon state
+  const [nearMeCoords, setNearMeCoords] = useState<[number, number] | null>(null);
+  const nearMeCoordsRef = useRef<[number, number] | null>(null);
 
   // GeoJSON source ref for updating data
   const clusterSourceRef = useRef<string>('supercluster-source');
@@ -271,6 +305,35 @@ function MapContent() {
         'line-color': '#00f0ff',
         'line-width': 2.5,
         'line-opacity': 0.95,
+      },
+    });
+
+    // 1b. Near Me 5km radius circle source and layers
+    safeAddSource('near-me-radius-source', {
+      type: 'geojson',
+      data: nearMeCoordsRef.current
+        ? createGeoJSONCircle(nearMeCoordsRef.current, 5.0)
+        : { type: 'FeatureCollection', features: [] },
+    });
+
+    safeAddLayer({
+      id: 'near-me-radius-fill',
+      type: 'fill',
+      source: 'near-me-radius-source',
+      paint: {
+        'fill-color': '#01367d',
+        'fill-opacity': 0.16,
+      },
+    });
+
+    safeAddLayer({
+      id: 'near-me-radius-line',
+      type: 'line',
+      source: 'near-me-radius-source',
+      paint: {
+        'line-color': '#ffb241',
+        'line-width': 2,
+        'line-dasharray': [2, 2],
       },
     });
 
@@ -843,6 +906,22 @@ function MapContent() {
     fitBounds,
   ]);
 
+  // --- Update Near Me 5km radius circle source ---
+  useEffect(() => {
+    nearMeCoordsRef.current = nearMeCoords;
+    const map = mapRef.current;
+    if (!map || !isMapLoaded || !map.isStyleLoaded()) return;
+
+    const source = map.getSource('near-me-radius-source') as mapboxgl.GeoJSONSource | undefined;
+    if (source) {
+      if (nearMeCoords) {
+        source.setData(createGeoJSONCircle(nearMeCoords, 5.0));
+      } else {
+        source.setData({ type: 'FeatureCollection', features: [] });
+      }
+    }
+  }, [nearMeCoords, isMapLoaded, mapRef]);
+
   // --- Update sidebar when municipality/barangay changes ----
   useEffect(() => {
     if (!isReady || (!drillDown.municipality && !drillDown.barangay)) {
@@ -910,7 +989,17 @@ function MapContent() {
         getCities={getCities}
         onFlyToLocation={(coords, zoom) => flyTo(coords, zoom ?? 15)}
         onSelectProject={(id) => router.push(`/projects/${encodeURIComponent(id)}`)}
+        onNearMeSuccess={(coords) => setNearMeCoords(coords)}
       />
+
+      {/* Near Me 5km Search Radius Radar Indicator */}
+      {nearMeCoords && (
+        <div className="absolute bottom-6 left-1/2 -translate-x-1/2 z-20 bg-[#011438]/95 border border-[#01367d] text-white px-5 py-2.5 rounded-full font-mono text-xs flex items-center gap-3 shadow-2xl backdrop-blur-md">
+          <span className="h-2 w-2 rounded-full bg-[#ffb241] animate-ping" />
+          <span className="font-bold tracking-wider">SEARCH RADIUS: 5.0 KM (SCANNING NEARBY INFRASTRUCTURE)</span>
+          <button onClick={() => setNearMeCoords(null)} className="ml-2 text-slate-400 hover:text-white font-bold">&times;</button>
+        </div>
+      )}
 
       {/* Project Sidebar */}
       {(drillDown.municipality || drillDown.barangay) && sidebarProjects.length > 0 && (

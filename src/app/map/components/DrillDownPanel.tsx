@@ -60,6 +60,7 @@ interface DrillDownPanelProps {
   onFlyToLocation?: (coords: [number, number], zoom?: number) => void;
   onSelectProject?: (projectId: string) => void;
   onNearMeClick?: () => void;
+  onNearMeSuccess?: (coords: [number, number]) => void;
   isLocating?: boolean;
 }
 
@@ -84,6 +85,7 @@ export default function DrillDownPanel({
   onFlyToLocation,
   onSelectProject,
   onNearMeClick,
+  onNearMeSuccess,
   isLocating: externalIsLocating,
 }: DrillDownPanelProps) {
   const currentProvinces = useMemo(() => getProvinces(region), [region, getProvinces]);
@@ -200,7 +202,10 @@ export default function DrillDownPanel({
         setInternalIsLocating(false);
         const { longitude, latitude } = pos.coords;
         if (onFlyToLocation) {
-          onFlyToLocation([longitude, latitude], 14);
+          onFlyToLocation([longitude, latitude], 13.5);
+        }
+        if (onNearMeSuccess) {
+          onNearMeSuccess([longitude, latitude]);
         }
       },
       (err) => {
