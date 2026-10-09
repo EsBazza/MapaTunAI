@@ -427,8 +427,10 @@ export default function OverviewTab({ project, onNavigateTab }: OverviewTabProps
                 <div className="flex items-baseline justify-between">
                   <span
                     className={`text-2xl font-mono font-black ${
-                      auditReport.discrepancyAudit.deltaGapPct > 0
+                      auditReport.discrepancyAudit.deltaGapPct > 20
                         ? 'text-red-400'
+                        : auditReport.discrepancyAudit.deltaGapPct < -20
+                        ? 'text-sky-300'
                         : 'text-emerald-400'
                     }`}
                   >
@@ -437,13 +439,21 @@ export default function OverviewTab({ project, onNavigateTab }: OverviewTabProps
                       : `${auditReport.discrepancyAudit.deltaGapPct}%`}
                   </span>
                   <span className="text-[11px] font-mono text-white/60">
-                    {auditReport.discrepancyAudit.deltaGapPct > 0 ? 'Billing Advance' : 'In Alignment'}
+                    {auditReport.discrepancyAudit.deltaGapPct > 15
+                      ? 'Billing Advance'
+                      : auditReport.discrepancyAudit.deltaGapPct < -15
+                      ? 'Work Ahead of Payout'
+                      : 'In Alignment'}
                   </span>
                 </div>
                 <div className="h-2 w-full rounded-full bg-white/10 overflow-hidden">
                   <div
                     className={`h-full rounded-full ${
-                      auditReport.discrepancyAudit.deltaGapPct > 0 ? 'bg-red-500' : 'bg-emerald-400'
+                      auditReport.discrepancyAudit.deltaGapPct > 20
+                        ? 'bg-red-500'
+                        : auditReport.discrepancyAudit.deltaGapPct < -20
+                        ? 'bg-sky-400'
+                        : 'bg-emerald-400'
                     }`}
                     style={{
                       width: `${Math.min(
@@ -453,7 +463,9 @@ export default function OverviewTab({ project, onNavigateTab }: OverviewTabProps
                     }}
                   />
                 </div>
-                <span className="text-[10px] text-white/50 block">Disbursement vs Milestone Gap</span>
+                <span className="text-[10px] text-white/50 block">
+                  Disbursement ({auditReport.discrepancyAudit.financialPayoutPct}%) vs Physical ({auditReport.discrepancyAudit.claimedPhysicalPct}%)
+                </span>
               </div>
             </div>
 
