@@ -20,7 +20,9 @@ export function useMapInstance(
 ) {
   const mapRef = useRef<mapboxgl.Map | null>(null);
   const [isMapLoaded, setIsMapLoaded] = useState(false);
+  const [styleLoadCount, setStyleLoadCount] = useState(0);
   const [currentZoom, setCurrentZoom] = useState(5.8);
+  const prevBasemapRef = useRef(basemap);
 
   useEffect(() => {
     const container = containerRef.current;
@@ -32,7 +34,7 @@ export function useMapInstance(
 
     const map = new mapboxgl.Map({
       container,
-      style: BASEMAP_STYLES['satellite'], // Default style on init
+      style: BASEMAP_STYLES[basemap] || BASEMAP_STYLES['satellite'], // Default style on init
       center: [122.0, 12.8],
       zoom: 5.8,
       minZoom: 4.8,
@@ -60,10 +62,26 @@ export function useMapInstance(
     };
   }, [containerRef]);
 
+  // Support style.load event lifecycle
+  useEffect(() => {
+    const map = mapRef.current;
+    if (!map) return;
+    const onStyleLoad = () => {
+      setStyleLoadCount((c) => c + 1);
+    };
+    map.on('style.load', onStyleLoad);
+    return () => {
+      map.off('style.load', onStyleLoad);
+    };
+  }, [isMapLoaded]);
+
   // Update map style when basemap changes, without destroying instance
   useEffect(() => {
     if (mapRef.current && isMapLoaded) {
-      mapRef.current.setStyle(BASEMAP_STYLES[basemap] || BASEMAP_STYLES.satellite);
+      if (prevBasemapRef.current !== basemap) {
+        prevBasemapRef.current = basemap;
+        mapRef.current.setStyle(BASEMAP_STYLES[basemap] || BASEMAP_STYLES.satellite);
+      }
     }
   }, [basemap, isMapLoaded]);
 
@@ -93,5 +111,5 @@ export function useMapInstance(
     [],
   );
 
-  return { mapRef, isMapLoaded, currentZoom, flyTo, fitBounds };
+  return { mapRef, isMapLoaded, styleLoadCount, currentZoom, flyTo, fitBounds };
 }

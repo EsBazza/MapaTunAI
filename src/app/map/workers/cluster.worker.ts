@@ -20,7 +20,7 @@ self.onmessage = function (e) {
       metadata = payload.metadata || null;
 
       supercluster = new (Supercluster as any)({
-        radius: 75,
+        radius: 45, // Optimized down from 75 for cleaner spatial separation
         maxZoom: 15,
         minZoom: 0,
         minPoints: 2,

@@ -33,11 +33,14 @@ function MapContent() {
   const [selectedProjectId, setSelectedProjectId] = useState<string | null>(null);
 
   // Core hooks
-  const { mapRef, isMapLoaded, currentZoom, flyTo, fitBounds } = useMapInstance(mapContainerRef, basemap);
+  const { mapRef, isMapLoaded, styleLoadCount, currentZoom, flyTo, fitBounds } = useMapInstance(mapContainerRef, basemap);
   const { sortedRegions, centroids, getProvinces, getCities } = useLocationHierarchy();
   const { isReady, totalPoints, getClusters, applyFilters, getLeaves, getExpansionZoom } = useSupercluster();
 
   const drillDown = useDrillDown(centroids, flyTo, fitBounds);
+
+  const lastBoundaryDataRef = useRef<any>(null);
+  const lastMaskDataRef = useRef<any>(null);
 
   // Choropleth data
   const [choroplethData, setChoroplethData] = useState<ChoroplethStat[]>([]);
@@ -208,369 +211,247 @@ function MapContent() {
     }
   }, [mapRef, isReady, getClusters]);
 
-  // --- Setup Mapbox layers + event handlers -----------------
+  // --- Memoized Mount Layers --------------------------------
+  const mountLayers = useCallback(() => {
+    const map = mapRef.current;
+    if (!map || !map.isStyleLoaded()) return;
+
+    // Helper functions for safe source and layer addition
+    const safeAddSource = (id: string, source: any) => {
+      if (!map.getSource(id)) {
+        map.addSource(id, source);
+      }
+    };
+
+    const safeAddLayer = (layer: any, beforeId?: string) => {
+      if (!map.getLayer(layer.id)) {
+        map.addLayer(layer, beforeId);
+      }
+    };
+
+    // 1. Boundary and mask sources and layers
+    safeAddSource('selected-mask-source', {
+      type: 'geojson',
+      data: lastMaskDataRef.current || { type: 'FeatureCollection', features: [] },
+    });
+
+    safeAddLayer({
+      id: 'selected-boundary-mask',
+      type: 'fill',
+      source: 'selected-mask-source',
+      paint: {
+        'fill-color': '#020617',
+        'fill-opacity': 0.62,
+      },
+    });
+
+    safeAddSource('selected-boundary-source', {
+      type: 'geojson',
+      data: lastBoundaryDataRef.current || { type: 'FeatureCollection', features: [] },
+    });
+
+    safeAddLayer({
+      id: 'selected-boundary-glow',
+      type: 'line',
+      source: 'selected-boundary-source',
+      paint: {
+        'line-color': '#38bdf8',
+        'line-width': 6,
+        'line-blur': 3,
+        'line-opacity': 0.75,
+      },
+    });
+
+    safeAddLayer({
+      id: 'selected-boundary-line',
+      type: 'line',
+      source: 'selected-boundary-source',
+      paint: {
+        'line-color': '#00f0ff',
+        'line-width': 2.5,
+        'line-opacity': 0.95,
+      },
+    });
+
+    // 2. Supercluster GeoJSON source
+    safeAddSource(clusterSourceRef.current, {
+      type: 'geojson',
+      data: { type: 'FeatureCollection', features: [] },
+    });
+
+    // 3. Cluster layers (scaled down circle sizes)
+    // 3a. Cluster outer glow
+    safeAddLayer({
+      id: 'clusters-glow',
+      type: 'circle',
+      source: clusterSourceRef.current,
+      filter: ['has', 'point_count'],
+      paint: {
+        'circle-color': [
+          'step',
+          ['get', 'totalProjects'],
+          '#38bdf8', // < 500
+          500, '#34d399',
+          2500, '#fbbf24',
+          10000, '#fb923c',
+          40000, '#f87171',
+        ],
+        'circle-radius': [
+          'step',
+          ['get', 'totalProjects'],
+          14, // < 500
+          500, 18,
+          2500, 22,
+          10000, 26,
+          40000, 30,
+        ],
+        'circle-opacity': 0.45,
+        'circle-blur': 0.3,
+      },
+    });
+
+    // 3b. Cluster main blob
+    safeAddLayer({
+      id: 'clusters',
+      type: 'circle',
+      source: clusterSourceRef.current,
+      filter: ['has', 'point_count'],
+      paint: {
+        'circle-color': [
+          'case',
+          // High anomaly density (>30%) -> red
+          ['>', ['/', ['get', 'flaggedCount'], ['max', ['get', 'totalProjects'], 1]], 0.3],
+          '#dc2626',
+          // Medium anomaly density (>10%) -> amber
+          ['>', ['/', ['get', 'flaggedCount'], ['max', ['get', 'totalProjects'], 1]], 0.1],
+          '#d97706',
+          // Default color by count
+          [
+            'step',
+            ['get', 'totalProjects'],
+            '#0284c7',
+            500, '#059669',
+            2500, '#d97706',
+            10000, '#ea580c',
+            40000, '#dc2626',
+          ],
+        ],
+        'circle-radius': [
+          'step',
+          ['get', 'totalProjects'],
+          11,
+          500, 14,
+          2500, 17,
+          10000, 20,
+          40000, 24,
+        ],
+        'circle-stroke-width': 1.5,
+        'circle-stroke-color': '#ffffff',
+        'circle-opacity': 0.95,
+      },
+    });
+
+    // 3c. Cluster count label
+    safeAddLayer({
+      id: 'cluster-count',
+      type: 'symbol',
+      source: clusterSourceRef.current,
+      filter: ['has', 'point_count'],
+      layout: {
+        'text-field': [
+          'case',
+          ['>=', ['get', 'totalProjects'], 100000],
+          ['concat', ['to-string', ['round', ['/', ['get', 'totalProjects'], 1000]]], 'k'],
+          ['>=', ['get', 'totalProjects'], 10000],
+          ['concat', ['to-string', ['round', ['/', ['get', 'totalProjects'], 1000]]], 'k'],
+          ['>=', ['get', 'totalProjects'], 1000],
+          ['concat', ['to-string', ['/', ['round', ['*', ['/', ['get', 'totalProjects'], 1000], 10]], 10]], 'k'],
+          ['to-string', ['round', ['get', 'totalProjects']]],
+        ],
+        'text-font': ['Open Sans Bold', 'Arial Unicode MS Bold'],
+        'text-size': 11,
+        'text-allow-overlap': true,
+      },
+      paint: {
+        'text-color': '#ffffff',
+      },
+    });
+
+    // 4. Individual pin layers
+    // 4a. Pin outer glow
+    safeAddLayer({
+      id: 'unclustered-point-glow',
+      type: 'circle',
+      source: clusterSourceRef.current,
+      filter: ['!', ['has', 'point_count']],
+      paint: {
+        'circle-color': [
+          'case',
+          ['==', ['coalesce', ['get', 'k'], 0], 2], '#ef4444',
+          ['==', ['coalesce', ['get', 'k'], 0], 1], '#f59e0b',
+          '#10b981',
+        ],
+        'circle-radius': [
+          'interpolate', ['linear'], ['zoom'],
+          10, 8, 14, 14, 18, 18,
+        ],
+        'circle-opacity': 0.38,
+        'circle-blur': 0.35,
+      },
+    });
+
+    // 4b. Pin core circle - budget-scaled
+    safeAddLayer({
+      id: 'unclustered-point',
+      type: 'circle',
+      source: clusterSourceRef.current,
+      filter: ['!', ['has', 'point_count']],
+      paint: {
+        'circle-color': [
+          'case',
+          ['==', ['coalesce', ['get', 'k'], 0], 2], '#ef4444',
+          ['==', ['coalesce', ['get', 'k'], 0], 1], '#f59e0b',
+          '#10b981',
+        ],
+        'circle-radius': [
+          'interpolate', ['linear'], ['zoom'],
+          10, [
+            'interpolate', ['linear'], ['coalesce', ['get', 'b'], 0],
+            0, 4.5, 1000, 5.5, 50000, 8, 500000, 11,
+          ],
+          18, [
+            'interpolate', ['linear'], ['coalesce', ['get', 'b'], 0],
+            0, 7, 1000, 9, 50000, 13, 500000, 18,
+          ],
+        ],
+        'circle-stroke-width': 1.5,
+        'circle-stroke-color': '#ffffff',
+      },
+    });
+  }, [mapRef]);
+
+  // --- Mount layers & render clusters on initial load or style change ---
   useEffect(() => {
     const map = mapRef.current;
     if (!map || !isMapLoaded) return;
 
-    // Wait for style to be loaded
-    const setupLayers = () => {
-      // -- BOUNDARY & MASK LAYERS (for drill-down focus) ----
-      if (!map.getSource('selected-mask-source')) {
-        map.addSource('selected-mask-source', {
-          type: 'geojson',
-          data: { type: 'FeatureCollection', features: [] },
-        });
-
-        map.addLayer({
-          id: 'selected-boundary-mask',
-          type: 'fill',
-          source: 'selected-mask-source',
-          paint: {
-            'fill-color': '#020617',
-            'fill-opacity': 0.62,
-          },
-        });
-      }
-
-      if (!map.getSource('selected-boundary-source')) {
-        map.addSource('selected-boundary-source', {
-          type: 'geojson',
-          data: { type: 'FeatureCollection', features: [] },
-        });
-
-        // Glowing outer blur line
-        map.addLayer({
-          id: 'selected-boundary-glow',
-          type: 'line',
-          source: 'selected-boundary-source',
-          paint: {
-            'line-color': '#38bdf8',
-            'line-width': 6,
-            'line-blur': 3,
-            'line-opacity': 0.75,
-          },
-        });
-
-        // Sharp vibrant neon inner line
-        map.addLayer({
-          id: 'selected-boundary-line',
-          type: 'line',
-          source: 'selected-boundary-source',
-          paint: {
-            'line-color': '#00f0ff',
-            'line-width': 2.5,
-            'line-opacity': 0.95,
-          },
-        });
-      }
-
-      if (map.getSource(clusterSourceRef.current)) return; // Already setup
-
-      // Add empty GeoJSON source (Supercluster will populate it)
-      map.addSource(clusterSourceRef.current, {
-        type: 'geojson',
-        data: { type: 'FeatureCollection', features: [] },
-      });
-
-      // -- CLUSTER LAYERS ----------------------------------
-
-      // 1. Cluster outer glow
-      map.addLayer({
-        id: 'clusters-glow',
-        type: 'circle',
-        source: clusterSourceRef.current,
-        filter: ['has', 'point_count'],
-        paint: {
-          'circle-color': [
-            'step',
-            ['get', 'totalProjects'],
-            '#38bdf8',   // < 500
-            500, '#34d399',
-            2500, '#fbbf24',
-            10000, '#fb923c',
-            40000, '#f87171',
-          ],
-          'circle-radius': [
-            'step',
-            ['get', 'totalProjects'],
-            24,          // < 500
-            500, 30,
-            2500, 38,
-            10000, 46,
-            40000, 56,
-          ],
-          'circle-opacity': 0.45,
-          'circle-blur': 0.3,
-        },
-      });
-
-      // 2. Cluster main blob
-      map.addLayer({
-        id: 'clusters',
-        type: 'circle',
-        source: clusterSourceRef.current,
-        filter: ['has', 'point_count'],
-        paint: {
-          'circle-color': [
-            'case',
-            // High anomaly density (>30%) → red
-            ['>', ['/', ['get', 'flaggedCount'], ['max', ['get', 'totalProjects'], 1]], 0.3],
-            '#dc2626',
-            // Medium anomaly density (>10%) → amber
-            ['>', ['/', ['get', 'flaggedCount'], ['max', ['get', 'totalProjects'], 1]], 0.1],
-            '#d97706',
-            // Default color by count
-            [
-              'step',
-              ['get', 'totalProjects'],
-              '#0284c7',
-              500, '#059669',
-              2500, '#d97706',
-              10000, '#ea580c',
-              40000, '#dc2626',
-            ],
-          ],
-          'circle-radius': [
-            'step',
-            ['get', 'totalProjects'],
-            18,
-            500, 23,
-            2500, 29,
-            10000, 36,
-            40000, 44,
-          ],
-          'circle-stroke-width': 2.5,
-          'circle-stroke-color': 'rgba(255, 255, 255, 0.9)',
-          'circle-opacity': 0.95,
-        },
-      });
-
-      // 3. Cluster count label
-      map.addLayer({
-        id: 'cluster-count',
-        type: 'symbol',
-        source: clusterSourceRef.current,
-        filter: ['has', 'point_count'],
-        layout: {
-          'text-field': [
-            'case',
-            ['>=', ['get', 'totalProjects'], 100000],
-            ['concat', ['to-string', ['round', ['/', ['get', 'totalProjects'], 1000]]], 'k'],
-            ['>=', ['get', 'totalProjects'], 10000],
-            ['concat', ['to-string', ['round', ['/', ['get', 'totalProjects'], 1000]]], 'k'],
-            ['>=', ['get', 'totalProjects'], 1000],
-            ['concat', ['to-string', ['/', ['round', ['*', ['/', ['get', 'totalProjects'], 1000], 10]], 10]], 'k'],
-            ['to-string', ['round', ['get', 'totalProjects']]],
-          ],
-          'text-font': ['Open Sans Bold', 'Arial Unicode MS Bold'],
-          'text-size': 13,
-          'text-allow-overlap': true,
-        },
-        paint: {
-          'text-color': '#ffffff',
-        },
-      });
-
-      // -- INDIVIDUAL PIN LAYERS ---------------------------
-
-      // 4. Pin outer glow
-      map.addLayer({
-        id: 'unclustered-point-glow',
-        type: 'circle',
-        source: clusterSourceRef.current,
-        filter: ['!', ['has', 'point_count']],
-        paint: {
-          'circle-color': [
-            'case',
-            ['==', ['coalesce', ['get', 'k'], 0], 2], '#ef4444',
-            ['==', ['coalesce', ['get', 'k'], 0], 1], '#f59e0b',
-            '#10b981',
-          ],
-          'circle-radius': [
-            'interpolate', ['linear'], ['zoom'],
-            10, 8, 14, 14, 18, 18,
-          ],
-          'circle-opacity': 0.38,
-          'circle-blur': 0.35,
-        },
-      });
-
-      // 5. Pin core circle - budget-scaled
-      map.addLayer({
-        id: 'unclustered-point',
-        type: 'circle',
-        source: clusterSourceRef.current,
-        filter: ['!', ['has', 'point_count']],
-        paint: {
-          'circle-color': [
-            'case',
-            ['==', ['coalesce', ['get', 'k'], 0], 2], '#ef4444',
-            ['==', ['coalesce', ['get', 'k'], 0], 1], '#f59e0b',
-            '#10b981',
-          ],
-          'circle-radius': [
-            'interpolate', ['linear'], ['zoom'],
-            10, [
-              'interpolate', ['linear'], ['coalesce', ['get', 'b'], 0],
-              0, 4.5, 1000, 5.5, 50000, 8, 500000, 11,
-            ],
-            18, [
-              'interpolate', ['linear'], ['coalesce', ['get', 'b'], 0],
-              0, 7, 1000, 9, 50000, 13, 500000, 18,
-            ],
-          ],
-          'circle-stroke-width': 2.5,
-          'circle-stroke-color': '#ffffff',
-        },
-      });
-
-      // -- EVENT HANDLERS ----------------------------------
-
-      // Click on cluster → zoom in
-      map.on('click', 'clusters', async (e) => {
-        const features = map.queryRenderedFeatures(e.point, { layers: ['clusters'] });
-        const clusterId = features[0]?.properties?.cluster_id;
-        if (clusterId === undefined) return;
-
-        const coords = (features[0].geometry as any).coordinates.slice();
-        const currentMapZoom = map.getZoom();
-
-        try {
-          const expansionZoom = await getExpansionZoom(clusterId);
-          const targetZoom = Math.min(
-            Math.max(expansionZoom + 0.5, currentMapZoom + 2),
-            16,
-          );
-          map.easeTo({ center: coords, zoom: targetZoom, duration: 650 });
-        } catch {
-          map.easeTo({
-            center: coords,
-            zoom: Math.min(currentMapZoom + 2.5, 16),
-            duration: 650,
-          });
-        }
-      });
-
-      // Click on unclustered pin → take user to full page detail dossier
-      map.on('click', 'unclustered-point', (e) => {
-        const features = map.queryRenderedFeatures(e.point, { layers: ['unclustered-point'] });
-        const projId = features[0]?.properties?.i || features[0]?.properties?.id;
-        if (projId) {
-          router.push(`/projects/${encodeURIComponent(projId)}`);
-        }
-      });
-
-      // -- HOVER TOOLTIPS ----------------------------------
-
-      const hoverPopup = new mapboxgl.Popup({
-        closeButton: false,
-        closeOnClick: false,
-        offset: 12,
-      });
-
-      // Hover on individual pin
-      map.on('mouseenter', 'unclustered-point', (e) => {
-        map.getCanvas().style.cursor = 'pointer';
-        const feature = e.features?.[0];
-        if (!feature) return;
-
-        const coords = (feature.geometry as any).coordinates.slice();
-        const p = feature.properties || {};
-
-        let badgeColor = '#10b981';
-        let badgeText = 'ON TRACK';
-        if (p.k === 2 || p.fo || p.fs) {
-          badgeColor = '#ef4444';
-          badgeText = 'CRITICAL / OVERPAID';
-        } else if (p.k === 1 || p.fd || p.fn) {
-          badgeColor = '#f59e0b';
-          badgeText = 'FLAGGED / DELAYED';
-        }
-
-        const budget = p.b !== undefined ? (p.b < 10000000 ? p.b * 1000 : p.b) : 0;
-        const progress = Number(p.g ?? p.p ?? p.progress ?? 0);
-        const category = p.c || p.cat || 'Infrastructure';
-        const title = p.n || p.name || 'DPWH Infrastructure Project';
-
-        hoverPopup
-          .setLngLat(coords)
-          .setHTML(`
-            <div style="background: rgba(1, 20, 56, 0.96); backdrop-filter: blur(12px); border-radius: 14px; padding: 12px 15px; color: #fff; font-family: system-ui, sans-serif; min-width: 250px; font-size: 11px; border: 1px solid rgba(1, 54, 125, 0.7); box-shadow: 0 16px 36px rgba(0,0,0,0.65);">
-              <div style="display: flex; justify-content: space-between; align-items: center;">
-                <span style="font-size: 9px; font-weight: 800; color: #ffb241; text-transform: uppercase; letter-spacing: 0.05em;">${category}</span>
-                <span style="font-size: 9px; font-weight: 800; color: ${badgeColor}; background: rgba(255,255,255,0.08); padding: 2px 7px; border-radius: 6px; letter-spacing: 0.04em;">${badgeText}</span>
-              </div>
-              <div style="font-weight: 800; margin-top: 6px; line-height: 1.35; color: #f8fafc; font-size: 12px;">${title}</div>
-              <div style="margin-top: 10px; display: flex; justify-content: space-between; border-top: 1px solid rgba(255,255,255,0.12); padding-top: 6px;">
-                <span style="color: #94a3b8; font-weight: 600;">Allocated Budget:</span>
-                <span style="color: #ffb241; font-weight: 800; font-family: monospace;">${formatCurrency(budget)}</span>
-              </div>
-              <div style="display: flex; justify-content: space-between; margin-top: 3px;">
-                <span style="color: #94a3b8; font-weight: 600;">Physical Progress:</span>
-                <span style="color: #34d399; font-weight: 800; font-family: monospace;">${progress.toFixed(1)}%</span>
-              </div>
-              <div style="margin-top: 8px; font-size: 10px; font-weight: 700; color: #ffb241; text-align: right;">View Project Dossier &rarr;</div>
-            </div>
-          `)
-          .addTo(map);
-      });
-
-      map.on('mouseleave', 'unclustered-point', () => {
-        map.getCanvas().style.cursor = '';
-        hoverPopup.remove();
-      });
-
-      // Hover on cluster
-      const clusterPopup = new mapboxgl.Popup({
-        closeButton: false,
-        closeOnClick: false,
-        offset: 14,
-      });
-
-      map.on('mouseenter', 'clusters', (e) => {
-        map.getCanvas().style.cursor = 'pointer';
-        const feature = e.features?.[0];
-        if (!feature) return;
-
-        const coords = (feature.geometry as any).coordinates.slice();
-        const p = feature.properties || {};
-        const count = p.totalProjects || p.point_count || 1;
-        const budget = p.totalBudget || 0;
-        const flagged = p.flaggedCount || 0;
-        const anomalyPct = count > 0 ? ((flagged / count) * 100).toFixed(1) : '0';
-
-        clusterPopup
-          .setLngLat(coords)
-          .setHTML(`
-            <div style="background: rgba(1, 20, 56, 0.96); backdrop-filter: blur(12px); border-radius: 14px; padding: 12px 15px; color: #fff; font-family: system-ui, sans-serif; min-width: 200px; font-size: 11px; border: 1px solid rgba(1, 54, 125, 0.7); box-shadow: 0 16px 36px rgba(0,0,0,0.65);">
-              <div style="font-size: 9px; font-weight: 800; color: #ffb241; text-transform: uppercase; letter-spacing: 0.05em;">Infrastructure Cluster</div>
-              <div style="font-size: 14px; font-weight: 800; color: #fff; margin-top: 3px;">${Number(count).toLocaleString()} Projects</div>
-              ${budget > 0 ? `<div style="font-size: 10px; color: #94a3b8; margin-top: 4px;">Budget: <span style="color: #ffb241; font-weight: 700; font-family: monospace;">${formatCurrency(budget)}</span></div>` : ''}
-              ${flagged > 0 ? `<div style="font-size: 10px; color: #f87171; margin-top: 3px;">${flagged.toLocaleString()} flagged (${anomalyPct}%)</div>` : ''}
-              <div style="margin-top: 7px; font-size: 9px; color: #cbd5e1;">Click to zoom &amp; expand &rarr;</div>
-            </div>
-          `)
-          .addTo(map);
-      });
-
-      map.on('mouseleave', 'clusters', () => {
-        map.getCanvas().style.cursor = '';
-        clusterPopup.remove();
-      });
-
-      // Cursor pointer for both layers
-      map.on('mouseenter', 'clusters', () => { map.getCanvas().style.cursor = 'pointer'; });
-      map.on('mouseenter', 'unclustered-point', () => { map.getCanvas().style.cursor = 'pointer'; });
-    };
-
     if (map.isStyleLoaded()) {
-      setupLayers();
+      mountLayers();
+      renderClusters();
     } else {
-      map.on('load', setupLayers);
+      map.once('style.load', () => {
+        mountLayers();
+        renderClusters();
+      });
     }
+  }, [isMapLoaded, styleLoadCount, mountLayers, renderClusters, mapRef]);
 
-    // -- VIEWPORT CHANGE → RE-RENDER CLUSTERS ------------
+  // --- Setup Mapbox event handlers --------------------------
+  useEffect(() => {
+    const map = mapRef.current;
+    if (!map || !isMapLoaded) return;
+
+    // Viewport change -> re-render clusters
     const onMoveEnd = () => {
       if (renderTimeoutRef.current) clearTimeout(renderTimeoutRef.current);
       renderTimeoutRef.current = setTimeout(() => {
@@ -581,12 +462,157 @@ function MapContent() {
     map.on('moveend', onMoveEnd);
     map.on('zoomend', onMoveEnd);
 
+    // Click on cluster -> zoom in
+    const onClusterClick = async (e: mapboxgl.MapMouseEvent) => {
+      const features = map.queryRenderedFeatures(e.point, { layers: ['clusters'] });
+      const clusterId = features[0]?.properties?.cluster_id;
+      if (clusterId === undefined) return;
+
+      const coords = (features[0].geometry as any).coordinates.slice();
+      const currentMapZoom = map.getZoom();
+
+      try {
+        const expansionZoom = await getExpansionZoom(clusterId);
+        const targetZoom = Math.min(
+          Math.max(expansionZoom + 0.5, currentMapZoom + 2),
+          16,
+        );
+        map.easeTo({ center: coords, zoom: targetZoom, duration: 650 });
+      } catch {
+        map.easeTo({
+          center: coords,
+          zoom: Math.min(currentMapZoom + 2.5, 16),
+          duration: 650,
+        });
+      }
+    };
+    map.on('click', 'clusters', onClusterClick);
+
+    // Click on unclustered pin -> navigate to project dossier
+    const onPointClick = (e: mapboxgl.MapMouseEvent) => {
+      const features = map.queryRenderedFeatures(e.point, { layers: ['unclustered-point'] });
+      const projId = features[0]?.properties?.i || features[0]?.properties?.id;
+      if (projId) {
+        router.push(`/projects/${encodeURIComponent(projId)}`);
+      }
+    };
+    map.on('click', 'unclustered-point', onPointClick);
+
+    // Hover tooltips
+    const hoverPopup = new mapboxgl.Popup({
+      closeButton: false,
+      closeOnClick: false,
+      offset: 12,
+    });
+
+    const onPointEnter = (e: mapboxgl.MapMouseEvent & { features?: mapboxgl.MapboxGeoJSONFeature[] }) => {
+      map.getCanvas().style.cursor = 'pointer';
+      const feature = e.features?.[0];
+      if (!feature) return;
+
+      const coords = (feature.geometry as any).coordinates.slice();
+      const p = feature.properties || {};
+
+      let badgeColor = '#10b981';
+      let badgeText = 'ON TRACK';
+      if (p.k === 2 || p.fo || p.fs) {
+        badgeColor = '#ef4444';
+        badgeText = 'CRITICAL / OVERPAID';
+      } else if (p.k === 1 || p.fd || p.fn) {
+        badgeColor = '#f59e0b';
+        badgeText = 'FLAGGED / DELAYED';
+      }
+
+      const budget = p.b !== undefined ? (p.b < 10000000 ? p.b * 1000 : p.b) : 0;
+      const progress = Number(p.g ?? p.p ?? p.progress ?? 0);
+      const category = p.c || p.cat || 'Infrastructure';
+      const title = p.n || p.name || 'DPWH Infrastructure Project';
+
+      hoverPopup
+        .setLngLat(coords)
+        .setHTML(`
+          <div style="background: rgba(1, 20, 56, 0.96); backdrop-filter: blur(12px); border-radius: 14px; padding: 12px 15px; color: #fff; font-family: system-ui, sans-serif; min-width: 250px; font-size: 11px; border: 1px solid rgba(1, 54, 125, 0.7); box-shadow: 0 16px 36px rgba(0,0,0,0.65);">
+            <div style="display: flex; justify-content: space-between; align-items: center;">
+              <span style="font-size: 9px; font-weight: 800; color: #ffb241; text-transform: uppercase; letter-spacing: 0.05em;">${category}</span>
+              <span style="font-size: 9px; font-weight: 800; color: ${badgeColor}; background: rgba(255,255,255,0.08); padding: 2px 7px; border-radius: 6px; letter-spacing: 0.04em;">${badgeText}</span>
+            </div>
+            <div style="font-weight: 800; margin-top: 6px; line-height: 1.35; color: #f8fafc; font-size: 12px;">${title}</div>
+            <div style="margin-top: 10px; display: flex; justify-content: space-between; border-top: 1px solid rgba(255,255,255,0.12); padding-top: 6px;">
+              <span style="color: #94a3b8; font-weight: 600;">Allocated Budget:</span>
+              <span style="color: #ffb241; font-weight: 800; font-family: monospace;">${formatCurrency(budget)}</span>
+            </div>
+            <div style="display: flex; justify-content: space-between; margin-top: 3px;">
+              <span style="color: #94a3b8; font-weight: 600;">Physical Progress:</span>
+              <span style="color: #34d399; font-weight: 800; font-family: monospace;">${progress.toFixed(1)}%</span>
+            </div>
+            <div style="margin-top: 8px; font-size: 10px; font-weight: 700; color: #ffb241; text-align: right;">View Project Dossier &rarr;</div>
+          </div>
+        `)
+        .addTo(map);
+    };
+
+    const onPointLeave = () => {
+      map.getCanvas().style.cursor = '';
+      hoverPopup.remove();
+    };
+
+    map.on('mouseenter', 'unclustered-point', onPointEnter);
+    map.on('mouseleave', 'unclustered-point', onPointLeave);
+
+    const clusterPopup = new mapboxgl.Popup({
+      closeButton: false,
+      closeOnClick: false,
+      offset: 14,
+    });
+
+    const onClusterEnter = (e: mapboxgl.MapMouseEvent & { features?: mapboxgl.MapboxGeoJSONFeature[] }) => {
+      map.getCanvas().style.cursor = 'pointer';
+      const feature = e.features?.[0];
+      if (!feature) return;
+
+      const coords = (feature.geometry as any).coordinates.slice();
+      const p = feature.properties || {};
+      const count = p.totalProjects || p.point_count || 1;
+      const budget = p.totalBudget || 0;
+      const flagged = p.flaggedCount || 0;
+      const anomalyPct = count > 0 ? ((flagged / count) * 100).toFixed(1) : '0';
+
+      clusterPopup
+        .setLngLat(coords)
+        .setHTML(`
+          <div style="background: rgba(1, 20, 56, 0.96); backdrop-filter: blur(12px); border-radius: 14px; padding: 12px 15px; color: #fff; font-family: system-ui, sans-serif; min-width: 200px; font-size: 11px; border: 1px solid rgba(1, 54, 125, 0.7); box-shadow: 0 16px 36px rgba(0,0,0,0.65);">
+            <div style="font-size: 9px; font-weight: 800; color: #ffb241; text-transform: uppercase; letter-spacing: 0.05em;">Infrastructure Cluster</div>
+            <div style="font-size: 14px; font-weight: 800; color: #fff; margin-top: 3px;">${Number(count).toLocaleString()} Projects</div>
+            ${budget > 0 ? `<div style="font-size: 10px; color: #94a3b8; margin-top: 4px;">Budget: <span style="color: #ffb241; font-weight: 700; font-family: monospace;">${formatCurrency(budget)}</span></div>` : ''}
+            ${flagged > 0 ? `<div style="font-size: 10px; color: #f87171; margin-top: 3px;">${flagged.toLocaleString()} flagged (${anomalyPct}%)</div>` : ''}
+            <div style="margin-top: 7px; font-size: 9px; color: #cbd5e1;">Click to zoom &amp; expand &rarr;</div>
+          </div>
+        `)
+        .addTo(map);
+    };
+
+    const onClusterLeave = () => {
+      map.getCanvas().style.cursor = '';
+      clusterPopup.remove();
+    };
+
+    map.on('mouseenter', 'clusters', onClusterEnter);
+    map.on('mouseleave', 'clusters', onClusterLeave);
+
     return () => {
       map.off('moveend', onMoveEnd);
       map.off('zoomend', onMoveEnd);
+      map.off('click', 'clusters', onClusterClick);
+      map.off('click', 'unclustered-point', onPointClick);
+      map.off('mouseenter', 'unclustered-point', onPointEnter);
+      map.off('mouseleave', 'unclustered-point', onPointLeave);
+      map.off('mouseenter', 'clusters', onClusterEnter);
+      map.off('mouseleave', 'clusters', onClusterLeave);
+      hoverPopup.remove();
+      clusterPopup.remove();
       if (renderTimeoutRef.current) clearTimeout(renderTimeoutRef.current);
     };
-  }, [isMapLoaded, mapRef, renderClusters, getExpansionZoom]);
+  }, [isMapLoaded, mapRef, renderClusters, getExpansionZoom, router]);
 
   // --- Trigger initial render when Supercluster is ready ----
   useEffect(() => {
@@ -598,7 +624,7 @@ function MapContent() {
   // --- Province Choropleth (zoom 5-7.5) ---------------------
   useEffect(() => {
     const map = mapRef.current;
-    if (!map || !isMapLoaded || !provinceGeoJson || !regionGeoJson) return;
+    if (!map || !isMapLoaded || !provinceGeoJson || !regionGeoJson || !map.isStyleLoaded()) return;
 
     if (map.getLayer('province-choropleth-layer')) map.removeLayer('province-choropleth-layer');
     if (map.getLayer('province-borders-layer')) map.removeLayer('province-borders-layer');
@@ -626,6 +652,8 @@ function MapContent() {
       data: { type: 'FeatureCollection', features: enrichedFeatures },
     });
 
+    const clusterBeforeId = map.getLayer('clusters-glow') ? 'clusters-glow' : undefined;
+
     map.addLayer({
       id: 'province-choropleth-layer',
       type: 'fill',
@@ -641,7 +669,7 @@ function MapContent() {
           5.0, 0.45, 6.5, 0.25, 7.5, 0.0,
         ],
       },
-    });
+    }, clusterBeforeId);
 
     map.addLayer({
       id: 'province-borders-layer',
@@ -652,7 +680,7 @@ function MapContent() {
         'line-width': 0.8,
         'line-opacity': 0.45,
       },
-    });
+    }, clusterBeforeId);
 
     map.addSource('region-source', {
       type: 'geojson',
@@ -668,16 +696,18 @@ function MapContent() {
         'line-width': 1.5,
         'line-opacity': 0.65,
       },
-    });
-  }, [isMapLoaded, provinceGeoJson, regionGeoJson, choroplethData, mapRef]);
+    }, clusterBeforeId);
+  }, [isMapLoaded, styleLoadCount, provinceGeoJson, regionGeoJson, choroplethData, mapRef]);
 
   // --- Municipality & Barangay Borders ----------------------
   useEffect(() => {
     const map = mapRef.current;
-    if (!map || !isMapLoaded) return;
+    if (!map || !isMapLoaded || !map.isStyleLoaded()) return;
 
     if (map.getLayer('municipality-borders-layer')) map.removeLayer('municipality-borders-layer');
     if (map.getSource('municities-source')) map.removeSource('municities-source');
+
+    const clusterBeforeId = map.getLayer('clusters-glow') ? 'clusters-glow' : undefined;
 
     if (municitiesGeoJson) {
       map.addSource('municities-source', {
@@ -699,7 +729,7 @@ function MapContent() {
             10.0, 0.7
           ]
         },
-      });
+      }, clusterBeforeId);
     }
 
     if (map.getLayer('barangay-borders-layer')) map.removeLayer('barangay-borders-layer');
@@ -719,14 +749,14 @@ function MapContent() {
           'line-width': 1,
           'line-opacity': 0.6
         }
-      });
+      }, clusterBeforeId);
     }
-  }, [isMapLoaded, municitiesGeoJson, barangaysGeoJson, mapRef]);
+  }, [isMapLoaded, styleLoadCount, municitiesGeoJson, barangaysGeoJson, mapRef]);
 
   // --- Update Boundary Outline & Inverted Dark Mask ----------
   useEffect(() => {
     const map = mapRef.current;
-    if (!map || !isMapLoaded) return;
+    if (!map || !isMapLoaded || !map.isStyleLoaded()) return;
 
     const boundarySource = map.getSource('selected-boundary-source') as mapboxgl.GeoJSONSource | undefined;
     const maskSource = map.getSource('selected-mask-source') as mapboxgl.GeoJSONSource | undefined;
@@ -753,6 +783,8 @@ function MapContent() {
 
     if (!boundaryType) {
       // Clear boundary and mask when nationwide / no drill-down selection
+      lastBoundaryDataRef.current = null;
+      lastMaskDataRef.current = null;
       if (boundarySource) boundarySource.setData({ type: 'FeatureCollection', features: [] });
       if (maskSource) maskSource.setData({ type: 'FeatureCollection', features: [] });
       return;
@@ -770,6 +802,9 @@ function MapContent() {
       .then((res) => (res.ok ? res.json() : null))
       .then((data) => {
         if (!data) return;
+
+        lastBoundaryDataRef.current = data.boundary || null;
+        lastMaskDataRef.current = data.mask || null;
 
         if (boundarySource && data.boundary) {
           boundarySource.setData({
@@ -797,6 +832,7 @@ function MapContent() {
       });
   }, [
     isMapLoaded,
+    styleLoadCount,
     mapRef,
     drillDown.region,
     drillDown.province,
