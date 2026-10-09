@@ -1,4 +1,4 @@
-﻿'use client';
+'use client';
 
 import { useState, useEffect, useRef, useCallback, Suspense } from 'react';
 import { useSearchParams, useRouter } from 'next/navigation';
@@ -116,17 +116,6 @@ function MapContent() {
     const filters: Record<string, any> = {};
     if (drillDown.region) filters.region = drillDown.region;
     if (drillDown.province) filters.province = drillDown.province;
-    if (drillDown.filterAnomaly !== 'All') {
-      const flagMap: Record<string, string> = {
-        overpaid: 'flagOverpaid',
-        stalled: 'flagStalled',
-        overdue: 'flagOverdue',
-        neverStarted: 'flagNeverStarted',
-        paymentPending: 'flagPaymentPending',
-      };
-      const flag = flagMap[drillDown.filterAnomaly];
-      if (flag) filters.flags = [flag];
-    }
 
     const hasFilters = Object.keys(filters).length > 0;
     if (hasFilters) {
@@ -139,7 +128,7 @@ function MapContent() {
       });
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [isReady, drillDown.region, drillDown.province, drillDown.filterAnomaly]);
+  }, [isReady, drillDown.region, drillDown.province]);
 
   // --- Load barangays geojson when municipality selected --------
   useEffect(() => {
@@ -873,12 +862,10 @@ function MapContent() {
         province={drillDown.province}
         municipality={drillDown.municipality}
         barangay={drillDown.barangay}
-        filterAnomaly={drillDown.filterAnomaly}
         setRegion={drillDown.setRegion}
         setProvince={drillDown.setProvince}
         setMunicipality={drillDown.setMunicipality}
         setBarangay={drillDown.setBarangay}
-        setFilterAnomaly={drillDown.setFilterAnomaly}
         navigateTo={drillDown.navigateTo}
         basemap={basemap}
         setBasemap={setBasemap}

@@ -1,8 +1,6 @@
-﻿'use client';
+'use client';
 
 import { useMemo, useState, useEffect, useRef } from 'react';
-import Link from 'next/link';
-import Image from 'next/image';
 import { formatCurrency } from '@/lib/format';
 
 interface CityItem {
@@ -50,12 +48,10 @@ interface DrillDownPanelProps {
   province: string;
   municipality: string;
   barangay: string;
-  filterAnomaly: string;
   setRegion: (v: string) => void;
   setProvince: (v: string) => void;
   setMunicipality: (v: string, file?: string) => void;
   setBarangay: (v: string, bounds?: [[number, number], [number, number]]) => void;
-  setFilterAnomaly: (v: string) => void;
   navigateTo: (level: 'root' | 'region' | 'province' | 'municipality') => void;
   basemap: string;
   setBasemap: (v: 'satellite' | 'dark' | 'streets') => void;
@@ -63,15 +59,9 @@ interface DrillDownPanelProps {
   getCities: (regionName: string, provinceName: string) => CityItem[];
   onFlyToLocation?: (coords: [number, number], zoom?: number) => void;
   onSelectProject?: (projectId: string) => void;
+  onNearMeClick?: () => void;
+  isLocating?: boolean;
 }
-
-const RISK_FILTERS = [
-  { value: 'All', label: 'ALL', dotColor: 'bg-slate-400' },
-  { value: 'overdue', label: 'OVERDUE', dotColor: 'bg-[#ef4444]' },
-  { value: 'stalled', label: 'STALLED', dotColor: 'bg-[#f59e0b]' },
-  { value: 'overpaid', label: 'GHOST RISK', dotColor: 'bg-[#a855f7]' },
-  { value: 'neverStarted', label: 'NOT STARTED', dotColor: 'bg-[#f43f5e]' },
-];
 
 export default function DrillDownPanel({
   currentZoom,
@@ -82,12 +72,10 @@ export default function DrillDownPanel({
   province,
   municipality,
   barangay,
-  filterAnomaly,
   setRegion,
   setProvince,
   setMunicipality,
   setBarangay,
-  setFilterAnomaly,
   navigateTo,
   basemap,
   setBasemap,
@@ -95,6 +83,8 @@ export default function DrillDownPanel({
   getCities,
   onFlyToLocation,
   onSelectProject,
+  onNearMeClick,
+  isLocating: externalIsLocating,
 }: DrillDownPanelProps) {
   const currentProvinces = useMemo(() => getProvinces(region), [region, getProvinces]);
   const currentCities = useMemo(() => getCities(region, province), [region, province, getCities]);
@@ -110,7 +100,8 @@ export default function DrillDownPanel({
   const searchContainerRef = useRef<HTMLDivElement>(null);
 
   // Near Me state
-  const [isLocating, setIsLocating] = useState(false);
+  const [internalIsLocating, setInternalIsLocating] = useState(false);
+  const isLocating = externalIsLocating ?? internalIsLocating;
   const [geoError, setGeoError] = useState<string | null>(null);
 
   useEffect(() => {
@@ -191,24 +182,29 @@ export default function DrillDownPanel({
   };
 
   const handleNearMe = () => {
+    if (onNearMeClick) {
+      onNearMeClick();
+      return;
+    }
+
     if (!navigator.geolocation) {
       setGeoError('Geolocation not supported by browser');
       return;
     }
 
-    setIsLocating(true);
+    setInternalIsLocating(true);
     setGeoError(null);
 
     navigator.geolocation.getCurrentPosition(
       (pos) => {
-        setIsLocating(false);
+        setInternalIsLocating(false);
         const { longitude, latitude } = pos.coords;
         if (onFlyToLocation) {
           onFlyToLocation([longitude, latitude], 14);
         }
       },
       (err) => {
-        setIsLocating(false);
+        setInternalIsLocating(false);
         console.warn('Geolocation error:', err.message);
         setGeoError('Location permission denied or unavailable');
         setTimeout(() => setGeoError(null), 3500);
@@ -225,73 +221,55 @@ export default function DrillDownPanel({
 
   return (
     <div className="absolute top-4 left-1/2 -translate-x-1/2 z-30 w-[96%] max-w-6xl bg-[#011438]/95 backdrop-blur-xl rounded-2xl border border-[#01367d]/70 shadow-2xl flex flex-col gap-2.5 p-3 text-white">
-      {/* -- ROW 1: Brand Logo Pill + In-HUD Search + Near Me + Counters -- */}
+      {/* -- ROW 1: Breadcrumbs + In-HUD Search + Near Me + Counters -- */}
       <div className="flex flex-wrap items-center justify-between gap-3">
-        {/* Brand Logo Pill (Click navigates to Home /) */}
-        <div className="flex items-center gap-2 shrink-0">
-          <Link
-            href="/"
-            className="flex items-center gap-2 px-3 py-1.5 rounded-xl bg-white/10 hover:bg-white/20 border border-white/15 transition-all group"
-            title="Return to Homepage"
+        {/* Breadcrumb Hierarchy Navigation */}
+        <div className="flex items-center gap-1 text-[11px] font-mono text-slate-300 shrink-0">
+          <button
+            onClick={() => navigateTo('root')}
+            className="hover:text-[#ffb241] px-1.5 py-0.5 rounded transition font-bold"
           >
-            <Image
-              src="/MAPATUNAI.png"
-              alt="MAPATUNAI"
-              width={110}
-              height={30}
-              className="h-6 w-auto object-contain transition-transform group-hover:scale-105"
-              priority
-            />
-          </Link>
-
-          {/* Breadcrumb Hierarchy Navigation */}
-          <div className="hidden md:flex items-center gap-1 text-[11px] font-mono text-slate-300">
-            <button
-              onClick={() => navigateTo('root')}
-              className="hover:text-[#ffb241] px-1.5 py-0.5 rounded transition"
-            >
-              PH
-            </button>
-            {region && (
-              <>
-                <span className="text-slate-500">/</span>
-                <button
-                  onClick={() => navigateTo('region')}
-                  className="hover:text-[#ffb241] px-1.5 py-0.5 rounded transition"
-                >
-                  {region.replace(/\s*\(.*\)/, '').slice(0, 16)}
-                </button>
-              </>
-            )}
-            {province && (
-              <>
-                <span className="text-slate-500">/</span>
-                <button
-                  onClick={() => navigateTo('province')}
-                  className="hover:text-[#ffb241] px-1.5 py-0.5 rounded transition text-[#ffb241]"
-                >
-                  {province}
-                </button>
-              </>
-            )}
-            {municipality && (
-              <>
-                <span className="text-slate-500">/</span>
-                <button
-                  onClick={() => navigateTo('municipality')}
-                  className="hover:text-[#ffb241] px-1.5 py-0.5 rounded transition text-emerald-400"
-                >
-                  {municipality}
-                </button>
-              </>
-            )}
-            {barangay && (
-              <>
-                <span className="text-slate-500">/</span>
-                <span className="text-cyan-300 font-bold">{barangay}</span>
-              </>
-            )}
-          </div>
+            PH
+          </button>
+          {region && (
+            <>
+              <span className="text-slate-500">/</span>
+              <button
+                onClick={() => navigateTo('region')}
+                className="hover:text-[#ffb241] px-1.5 py-0.5 rounded transition"
+              >
+                {region.replace(/\s*\(.*\)/, '').slice(0, 16)}
+              </button>
+            </>
+          )}
+          {province && (
+            <>
+              <span className="text-slate-500">/</span>
+              <button
+                onClick={() => navigateTo('province')}
+                className="hover:text-[#ffb241] px-1.5 py-0.5 rounded transition text-[#ffb241]"
+              >
+                {province}
+              </button>
+            </>
+          )}
+          {municipality && (
+            <>
+              <span className="text-slate-500">/</span>
+              <button
+                onClick={() => navigateTo('municipality')}
+                className="hover:text-[#ffb241] px-1.5 py-0.5 rounded transition text-emerald-400"
+              >
+                {municipality}
+              </button>
+            </>
+          )}
+          {barangay && (
+            <>
+              <span className="text-slate-500">/</span>
+              <span className="text-cyan-300 font-bold">{barangay}</span>
+            </>
+          )}
         </div>
 
         {/* Center: Real-Time In-HUD Search Input */}
@@ -446,90 +424,65 @@ export default function DrillDownPanel({
         </div>
       )}
 
-      {/* -- ROW 2: Hierarchical Dropdowns + Monospace Filter Pills -- */}
-      <div className="flex flex-wrap items-center justify-between gap-2.5 pt-1 border-t border-white/10 text-xs">
-        {/* Dropdowns */}
-        <div className="flex flex-wrap items-center gap-1.5 flex-1 min-w-[280px]">
+      {/* -- ROW 2: Hierarchical Dropdowns -- */}
+      <div className="flex flex-wrap items-center gap-1.5 pt-1 border-t border-white/10 text-xs">
+        <select
+          value={region}
+          onChange={(e) => setRegion(e.target.value)}
+          className="rounded-lg border border-[#01367d] bg-[#012456] px-2.5 py-1 text-xs font-semibold text-slate-200 focus:outline-none focus:border-[#ffb241]"
+        >
+          <option value="">All Regions</option>
+          {sortedRegions.map((r) => (
+            <option key={r.id} value={r.name}>{r.name}</option>
+          ))}
+        </select>
+
+        {region && (
           <select
-            value={region}
-            onChange={(e) => setRegion(e.target.value)}
+            value={province}
+            onChange={(e) => setProvince(e.target.value)}
             className="rounded-lg border border-[#01367d] bg-[#012456] px-2.5 py-1 text-xs font-semibold text-slate-200 focus:outline-none focus:border-[#ffb241]"
           >
-            <option value="">All Regions</option>
-            {sortedRegions.map((r) => (
-              <option key={r.id} value={r.name}>{r.name}</option>
+            <option value="">All Provinces</option>
+            {currentProvinces.map((p) => (
+              <option key={p.id} value={p.name}>{p.name}</option>
             ))}
           </select>
+        )}
 
-          {region && (
-            <select
-              value={province}
-              onChange={(e) => setProvince(e.target.value)}
-              className="rounded-lg border border-[#01367d] bg-[#012456] px-2.5 py-1 text-xs font-semibold text-slate-200 focus:outline-none focus:border-[#ffb241]"
-            >
-              <option value="">All Provinces</option>
-              {currentProvinces.map((p) => (
-                <option key={p.id} value={p.name}>{p.name}</option>
-              ))}
-            </select>
-          )}
+        {province && (
+          <select
+            value={municipality}
+            onChange={(e) => {
+              const val = e.target.value;
+              const cityItem = currentCities.find((c) => c.name === val);
+              setMunicipality(val, cityItem?.file);
+            }}
+            className="rounded-lg border border-[#01367d] bg-[#012456] px-2.5 py-1 text-xs font-semibold text-slate-200 focus:outline-none focus:border-[#ffb241]"
+          >
+            <option value="">All Cities / Muni</option>
+            {currentCities.map((c) => (
+              <option key={c.id} value={c.name}>{c.name}</option>
+            ))}
+          </select>
+        )}
 
-          {province && (
-            <select
-              value={municipality}
-              onChange={(e) => {
-                const val = e.target.value;
-                const cityItem = currentCities.find((c) => c.name === val);
-                setMunicipality(val, cityItem?.file);
-              }}
-              className="rounded-lg border border-[#01367d] bg-[#012456] px-2.5 py-1 text-xs font-semibold text-slate-200 focus:outline-none focus:border-[#ffb241]"
-            >
-              <option value="">All Cities / Muni</option>
-              {currentCities.map((c) => (
-                <option key={c.id} value={c.name}>{c.name}</option>
-              ))}
-            </select>
-          )}
-
-          {(municipality || province) && barangays.length > 0 && (
-            <select
-              value={barangay}
-              onChange={(e) => {
-                const val = e.target.value;
-                const bObj = barangays.find((b) => b.name === val);
-                setBarangay(val, bObj?.bounds);
-              }}
-              className="rounded-lg border border-[#01367d] bg-[#012456] px-2.5 py-1 text-xs font-semibold text-slate-200 focus:outline-none focus:border-[#ffb241]"
-            >
-              <option value="">All Barangays</option>
-              {barangays.map((b) => (
-                <option key={b.name} value={b.name}>{b.name}</option>
-              ))}
-            </select>
-          )}
-        </div>
-
-        {/* Clean Monospace Filter Pills (Strictly Zero Emojis) */}
-        <div className="flex items-center gap-1.5 shrink-0 font-mono text-[11px]">
-          <span className="text-slate-400 font-bold uppercase text-[10px] mr-1">FILTER:</span>
-          {RISK_FILTERS.map((f) => {
-            const isSelected = filterAnomaly === f.value;
-            return (
-              <button
-                key={f.value}
-                onClick={() => setFilterAnomaly(f.value)}
-                className={`inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg font-bold transition-all border ${
-                  isSelected
-                    ? 'bg-white text-[#011438] border-white shadow-sm font-black'
-                    : 'bg-white/5 text-slate-300 border-white/10 hover:bg-white/15 hover:text-white'
-                }`}
-              >
-                <span className={`h-1.5 w-1.5 rounded-full ${f.dotColor}`} />
-                <span>{f.label}</span>
-              </button>
-            );
-          })}
-        </div>
+        {(municipality || province) && barangays.length > 0 && (
+          <select
+            value={barangay}
+            onChange={(e) => {
+              const val = e.target.value;
+              const bObj = barangays.find((b) => b.name === val);
+              setBarangay(val, bObj?.bounds);
+            }}
+            className="rounded-lg border border-[#01367d] bg-[#012456] px-2.5 py-1 text-xs font-semibold text-slate-200 focus:outline-none focus:border-[#ffb241]"
+          >
+            <option value="">All Barangays</option>
+            {barangays.map((b) => (
+              <option key={b.name} value={b.name}>{b.name}</option>
+            ))}
+          </select>
+        )}
       </div>
     </div>
   );
