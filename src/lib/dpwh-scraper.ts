@@ -154,12 +154,7 @@ export async function syncScrapedContractToDb(data: ScrapedContractData) {
   const noa = links.noticeOfAward?.trim() || null;
   const ad = links.advertisement?.trim() || null;
 
-  const primaryDocUrl =
-    ca ||
-    ntp ||
-    noa ||
-    ad ||
-    `https://www.dpwh.gov.ph/dpwh/business/procurement/civil-works/contract/${encodeURIComponent(contractId)}`;
+  const primaryDocUrl = ca || ntp || noa || ad || '';
 
   const biddersJson = data.bidders && data.bidders.length > 0 ? JSON.stringify(data.bidders) : null;
 

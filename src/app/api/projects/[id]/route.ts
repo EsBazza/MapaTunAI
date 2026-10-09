@@ -238,9 +238,19 @@ export async function GET(
           name: resolvedRegion || project.province?.region?.name || '',
         },
       },
-      contractDocument: project.contractDocument || {
-        sourcePdfUrl: `https://www.dpwh.gov.ph/dpwh/business/procurement/civil-works/contract/${encodeURIComponent(id)}`,
-      },
+      contractDocument: project.contractDocument
+        ? {
+            ...project.contractDocument,
+            sourcePdfUrl:
+              project.contractDocument.sourcePdfUrl &&
+              !project.contractDocument.sourcePdfUrl.includes('dpwh.gov.ph')
+                ? project.contractDocument.sourcePdfUrl
+                : project.contractDocument.contractAgreementUrl ||
+                  project.contractDocument.noticeToProceedUrl ||
+                  project.contractDocument.noticeOfAwardUrl ||
+                  '',
+          }
+        : null,
     };
 
     return Response.json(

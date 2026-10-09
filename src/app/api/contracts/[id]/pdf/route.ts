@@ -1,15 +1,19 @@
-import { NextRequest } from 'next/server';
+import { NextRequest, NextResponse } from 'next/server';
 import { prisma } from '@/lib/prisma';
+import { fetchLiveContractFromScraper, syncScrapedContractToDb } from '@/lib/dpwh-scraper';
 
 export async function GET(
-  _request: NextRequest,
+  request: NextRequest,
   { params }: { params: Promise<{ id: string }> }
 ) {
   try {
     const { id } = await params;
+    const contractId = id.trim();
+    const searchParams = request.nextUrl.searchParams;
+    const shouldRedirect = searchParams.get('redirect') === 'true';
 
-    const contractDoc = await prisma.contractDocument.findUnique({
-      where: { projectId: id },
+    let contractDoc = await prisma.contractDocument.findUnique({
+      where: { projectId: contractId },
       include: {
         engineerSignature: true,
         project: {
@@ -23,10 +27,47 @@ export async function GET(
       },
     });
 
+    const hasRealDoc =
+      contractDoc &&
+      (contractDoc.contractAgreementUrl ||
+        contractDoc.noticeToProceedUrl ||
+        contractDoc.noticeOfAwardUrl ||
+        contractDoc.advertisementUrl ||
+        (contractDoc.sourcePdfUrl &&
+          contractDoc.sourcePdfUrl.startsWith('http') &&
+          contractDoc.sourcePdfUrl.endsWith('.pdf') &&
+          !contractDoc.sourcePdfUrl.includes('transparency.dpwh.gov.ph')));
+
+    // If missing or without real PDF URL, fetch from DPWH Transparency API: https://api.transparency.dpwh.gov.ph/projects/{contractId}
+    if (!hasRealDoc) {
+      try {
+        const scraped = await fetchLiveContractFromScraper(contractId);
+        if (scraped && scraped.contractId) {
+          const syncResult = await syncScrapedContractToDb(scraped);
+          contractDoc = await prisma.contractDocument.findUnique({
+            where: { projectId: contractId },
+            include: {
+              engineerSignature: true,
+              project: {
+                select: {
+                  id: true,
+                  name: true,
+                  budgetPHP: true,
+                  contractorRaw: true,
+                },
+              },
+            },
+          });
+        }
+      } catch (err) {
+        console.warn(`[Contracts PDF API] Live scrape error for ${contractId}:`, err);
+      }
+    }
+
     if (!contractDoc) {
       return Response.json(
         {
-          projectId: id,
+          projectId: contractId,
           extractionStatus: 'PENDING',
           message: 'Contract document not yet parsed for this project.',
         },
@@ -34,7 +75,26 @@ export async function GET(
       );
     }
 
-    return Response.json({ contractDocument: contractDoc });
+    const realPdfUrl =
+      contractDoc.contractAgreementUrl ||
+      contractDoc.noticeToProceedUrl ||
+      contractDoc.noticeOfAwardUrl ||
+      contractDoc.advertisementUrl ||
+      (contractDoc.sourcePdfUrl &&
+      contractDoc.sourcePdfUrl.startsWith('http') &&
+      contractDoc.sourcePdfUrl.endsWith('.pdf') &&
+      !contractDoc.sourcePdfUrl.includes('transparency.dpwh.gov.ph')
+        ? contractDoc.sourcePdfUrl
+        : null);
+
+    if (shouldRedirect && realPdfUrl) {
+      return NextResponse.redirect(realPdfUrl, 307);
+    }
+
+    return Response.json({
+      contractDocument: contractDoc,
+      directPdfUrl: realPdfUrl,
+    });
   } catch (error) {
     console.error('Error fetching contract PDF data:', error);
     return Response.json(

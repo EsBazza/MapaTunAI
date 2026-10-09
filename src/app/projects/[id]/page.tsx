@@ -266,14 +266,17 @@ export default function ProjectDossierPage({ params }: PageProps) {
 
           {/* Action Buttons Bar */}
           <div className="flex flex-wrap items-center gap-3 pt-2">
-            {/* View Document Button (Opens in new tab) */}
+            {/* View Document Button (Opens actual contract document PDF in new tab) */}
             <a
               href={
                 project.contractDocument?.contractAgreementUrl ||
+                project.contractDocument?.noticeToProceedUrl ||
+                project.contractDocument?.noticeOfAwardUrl ||
                 (project.contractDocument?.sourcePdfUrl &&
-                project.contractDocument.sourcePdfUrl.startsWith('http')
+                project.contractDocument.sourcePdfUrl.startsWith('http') &&
+                !project.contractDocument.sourcePdfUrl.includes('dpwh.gov.ph')
                   ? project.contractDocument.sourcePdfUrl
-                  : `https://www.dpwh.gov.ph/dpwh/business/procurement/civil-works/contract/${encodeURIComponent(project.id)}`)
+                  : `/api/projects/${encodeURIComponent(project.id)}/document`)
               }
               target="_blank"
               rel="noopener noreferrer"
