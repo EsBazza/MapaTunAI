@@ -86,15 +86,42 @@ export async function GET(req: Request) {
       if (fs.existsSync(p)) {
         const d = JSON.parse(fs.readFileSync(p, 'utf8'));
         const nameLower = name.toLowerCase().trim();
+        const REGION_ALIASES: Record<string, string> = {
+          'region iv-b': 'mimaropa region',
+          'region iv-b (mimaropa)': 'mimaropa region',
+          'mimaropa': 'mimaropa region',
+          'mimaropa region': 'mimaropa region',
+          'barmm': 'bangsamoro autonomous region in muslim mindanao (barmm)',
+          'armm': 'bangsamoro autonomous region in muslim mindanao (barmm)',
+          'bangsamoro': 'bangsamoro autonomous region in muslim mindanao (barmm)',
+          'bangsamoro autonomous region in muslim mindanao (barmm)': 'bangsamoro autonomous region in muslim mindanao (barmm)',
+          'bangsamoro autonomous region in muslim mindanao': 'bangsamoro autonomous region in muslim mindanao (barmm)',
+          'ncr': 'national capital region (ncr)',
+          'national capital region': 'national capital region (ncr)',
+          'national capital region (ncr)': 'national capital region (ncr)',
+          'car': 'cordillera administrative region (car)',
+          'cordillera': 'cordillera administrative region (car)',
+          'cordillera administrative region (car)': 'cordillera administrative region (car)',
+          'region iv-a': 'region iv-a (calabarzon)',
+          'calabarzon': 'region iv-a (calabarzon)',
+          'region iv-a (calabarzon)': 'region iv-a (calabarzon)',
+          'soccsksargen': 'region xii (soccsksargen)',
+          'region xii (soccsksargen)': 'region xii (soccsksargen)',
+          'caraga': 'region xiii (caraga)',
+          'region xiii (caraga)': 'region xiii (caraga)',
+        };
+        const targetCanonical = REGION_ALIASES[nameLower] || nameLower;
         const feat = d.features.find((f: any) => {
-          const regName = (f.properties?.region_name || f.properties?.name || '').toLowerCase().trim();
-          return regName === nameLower ||
-            regName.includes(nameLower) ||
-            nameLower.includes(regName) ||
-            (nameLower.includes('ncr') && regName.includes('national capital')) ||
-            (nameLower.includes('car') && !nameLower.includes('caraga') && regName.includes('cordillera')) ||
-            (nameLower.includes('armm') && regName.includes('muslim')) ||
-            (nameLower.includes('barmm') && regName.includes('muslim'));
+          const rawRegName = (f.properties?.adm1_en || f.properties?.region_name || f.properties?.name || '').toLowerCase().trim();
+          const canonicalRegName = REGION_ALIASES[rawRegName] || rawRegName;
+
+          if (canonicalRegName === targetCanonical) return true;
+          if (rawRegName === nameLower) return true;
+          if (nameLower.includes('mimaropa') && rawRegName.includes('mimaropa')) return true;
+          if (nameLower.includes('barmm') && rawRegName.includes('bangsamoro')) return true;
+          if (nameLower.includes('ncr') && rawRegName.includes('national capital')) return true;
+          if (nameLower.includes('car') && !nameLower.includes('caraga') && rawRegName.includes('cordillera')) return true;
+          return rawRegName.includes(nameLower) || nameLower.includes(rawRegName);
         });
         if (feat) {
           boundaryFeature = feat;
