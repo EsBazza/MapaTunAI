@@ -1,6 +1,6 @@
 'use client';
 
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { useRouter } from 'next/navigation';
 import Image from 'next/image';
 import { useContractors } from '@/hooks/use-projects';
@@ -25,6 +25,71 @@ export default function ContractorsPage() {
   const [sortOrder, setSortOrder] = useState<'desc' | 'asc'>('desc');
   const [filterRisk, setFilterRisk] = useState<'all' | 'clean' | 'overdue' | 'highrisk'>('all');
   const [page, setPage] = useState(1);
+
+  // Slide-over drawer state
+  const [activeDrawerContractor, setActiveDrawerContractor] = useState<{ name: string; id: string } | null>(null);
+  const [drawerProjects, setDrawerProjects] = useState<any[]>([]);
+  const [isDrawerLoading, setIsDrawerLoading] = useState(false);
+
+  // Fetch won projects when drawer contractor is opened
+  useEffect(() => {
+    if (!activeDrawerContractor) {
+      setDrawerProjects([]);
+      setIsDrawerLoading(false);
+      return;
+    }
+
+    let isMounted = true;
+    setIsDrawerLoading(true);
+
+    async function fetchDrawerProjects() {
+      try {
+        let res = await fetch(`/api/projects?contractor=${encodeURIComponent(activeDrawerContractor!.name)}&limit=50`);
+        let data = await res.json();
+        if (!data.projects || data.projects.length === 0) {
+          res = await fetch(`/api/projects?q=${encodeURIComponent(activeDrawerContractor!.name)}&limit=50`);
+          data = await res.json();
+        }
+        if (isMounted) {
+          setDrawerProjects(data.projects || []);
+        }
+      } catch (err) {
+        console.error('Failed to load drawer projects:', err);
+        if (isMounted) {
+          setDrawerProjects([]);
+        }
+      } finally {
+        if (isMounted) {
+          setIsDrawerLoading(false);
+        }
+      }
+    }
+
+    fetchDrawerProjects();
+
+    return () => {
+      isMounted = false;
+    };
+  }, [activeDrawerContractor]);
+
+  // Lock body scroll and attach Escape key listener when drawer is open
+  useEffect(() => {
+    if (activeDrawerContractor) {
+      document.body.style.overflow = 'hidden';
+      const handleKeyDown = (e: KeyboardEvent) => {
+        if (e.key === 'Escape') {
+          setActiveDrawerContractor(null);
+        }
+      };
+      window.addEventListener('keydown', handleKeyDown);
+      return () => {
+        document.body.style.overflow = '';
+        window.removeEventListener('keydown', handleKeyDown);
+      };
+    } else {
+      document.body.style.overflow = '';
+    }
+  }, [activeDrawerContractor]);
 
   // Query paginated contractors for leaderboard
   const { data: contractorsData, isLoading: isTableLoading } = useContractors({
@@ -331,7 +396,7 @@ export default function ContractorsPage() {
                             <button
                               onClick={(e) => {
                                 e.stopPropagation();
-                                router.push(`/search?q=${encodeURIComponent(c.name)}`);
+                                setActiveDrawerContractor({ name: c.name, id: c.id });
                               }}
                               className="rounded-full bg-[#01367d] px-6 py-2.5 text-xs sm:text-sm font-black text-white shadow-md hover:bg-[#ffb241] hover:text-[#01367d] hover:scale-105 transition-all duration-200 whitespace-nowrap"
                             >
@@ -456,7 +521,7 @@ export default function ContractorsPage() {
 
                   {/* Full Projects Button */}
                   <button
-                    onClick={() => router.push(`/search?q=${encodeURIComponent(activeContractor.label)}`)}
+                    onClick={() => setActiveDrawerContractor({ name: activeContractor.label, id: activeContractor.id })}
                     className="w-full mt-4 rounded-full bg-[#01367d] py-3.5 text-center text-xs sm:text-sm font-black text-white shadow-xl hover:bg-[#ffb241] hover:text-[#01367d] hover:scale-105 transition-all duration-200"
                   >
                     View All Won Projects &rarr;
@@ -472,6 +537,159 @@ export default function ContractorsPage() {
 
         </div>
       </div>
+
+      {/* -- Slide-Over Won Projects Drawer ------------------------------ */}
+      {activeDrawerContractor && (
+        <div
+          className="fixed inset-0 z-50 overflow-hidden"
+          aria-labelledby="slide-over-title"
+          role="dialog"
+          aria-modal="true"
+        >
+          {/* Backdrop overlay */}
+          <div
+            className="fixed inset-0 bg-[#011438]/60 backdrop-blur-xs transition-opacity duration-300"
+            onClick={() => setActiveDrawerContractor(null)}
+            aria-hidden="true"
+          />
+
+          <div className="fixed inset-y-0 right-0 max-w-full flex pl-6 sm:pl-10 z-50">
+            <div className="w-full max-w-xl bg-white h-full shadow-2xl z-50 flex flex-col border-l border-gray-200 animate-in slide-in-from-right duration-300">
+              
+              {/* Drawer Header */}
+              <div className="bg-[#011438] text-white p-6 border-b border-[#01367d]/40 flex items-start justify-between gap-4 shrink-0">
+                <div className="space-y-1.5 flex-1 min-w-0">
+                  <div className="inline-flex items-center gap-2 rounded-full bg-white/10 px-3 py-1 text-[11px] font-black text-[#ffb241] border border-white/15">
+                    <span className="h-1.5 w-1.5 rounded-full bg-[#ffb241]" />
+                    WON PROJECTS DOSSIER
+                  </div>
+                  <h2 id="slide-over-title" className="text-xl sm:text-2xl font-black tracking-tight text-white line-clamp-2 leading-snug">
+                    {activeDrawerContractor.name}
+                  </h2>
+                  <div className="flex items-center gap-2 text-xs font-semibold text-white/80">
+                    {isDrawerLoading ? (
+                      <span>Loading won contracts...</span>
+                    ) : (
+                      <span className="inline-flex items-center gap-1.5">
+                        <span className="font-bold text-[#ffb241]">{drawerProjects.length}</span>
+                        <span>Won Contract{drawerProjects.length === 1 ? '' : 's'}</span>
+                      </span>
+                    )}
+                  </div>
+                </div>
+
+                <button
+                  type="button"
+                  onClick={() => setActiveDrawerContractor(null)}
+                  className="rounded-full p-2 bg-white/10 hover:bg-white/20 text-white transition-colors shrink-0 focus:outline-none focus:ring-2 focus:ring-[#ffb241]"
+                  aria-label="Close drawer"
+                >
+                  <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.5} d="M6 18L18 6M6 6l12 12" />
+                  </svg>
+                </button>
+              </div>
+
+              {/* Drawer Body - Scrollable list of won contracts */}
+              <div className="flex-1 overflow-y-auto p-6 space-y-4 bg-[#f8fafd]">
+                {isDrawerLoading ? (
+                  <div className="space-y-4">
+                    {Array.from({ length: 4 }).map((_, i) => (
+                      <div key={i} className="animate-pulse rounded-2xl bg-white p-5 border border-gray-200/80 shadow-xs space-y-3">
+                        <div className="h-4 bg-gray-200 rounded w-3/4" />
+                        <div className="h-3 bg-gray-200 rounded w-1/3" />
+                        <div className="h-3 bg-gray-200 rounded w-1/2" />
+                      </div>
+                    ))}
+                  </div>
+                ) : drawerProjects.length === 0 ? (
+                  <div className="rounded-2xl bg-white p-8 text-center text-gray-500 font-semibold border border-gray-200">
+                    No won projects found for this contractor.
+                  </div>
+                ) : (
+                  drawerProjects.map((project: any) => {
+                    const progressPct = Math.min(Math.max(project.progress || 0, 0), 100);
+                    const locationParts = [
+                      project.province?.name,
+                      project.province?.region?.name,
+                    ].filter(Boolean);
+                    const locationStr = locationParts.length > 0 ? locationParts.join(', ') : (project.location || 'Location Not Specified');
+
+                    return (
+                      <div
+                        key={project.id}
+                        onClick={() => router.push(`/projects/${encodeURIComponent(project.id)}`)}
+                        className="group cursor-pointer rounded-2xl bg-white p-5 border border-gray-200/90 shadow-xs hover:border-[#01367d] hover:shadow-lg transition-all duration-200 flex flex-col gap-3"
+                      >
+                        {/* Project Name and ID */}
+                        <div className="space-y-1">
+                          <h3 className="font-bold text-sm text-[#01367d] group-hover:text-blue-700 transition leading-snug">
+                            {project.name}
+                          </h3>
+                          <div className="font-mono text-xs text-gray-500">
+                            Contract ID: {project.id}
+                          </div>
+                        </div>
+
+                        {/* Location */}
+                        <div className="flex items-center gap-1.5 text-xs text-gray-600 font-medium">
+                          <svg className="w-3.5 h-3.5 text-gray-400 shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M17.657 16.657L13.414 20.9a1.998 1.998 0 01-2.827 0l-4.244-4.243a8 8 0 1111.314 0z" />
+                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 11a3 3 0 11-6 0 3 3 0 016 0z" />
+                          </svg>
+                          <span className="truncate">{locationStr}</span>
+                        </div>
+
+                        {/* Approved Budget */}
+                        <div className="flex items-center justify-between text-xs pt-1 border-t border-gray-100">
+                          <span className="text-gray-500 font-semibold">Approved Budget</span>
+                          <span className="font-black text-[#011438] text-sm">
+                            {formatCurrency(project.budgetPHP ?? project.budget ?? 0)}
+                          </span>
+                        </div>
+
+                        {/* Physical Progress */}
+                        <div className="space-y-1">
+                          <div className="flex items-center justify-between text-xs font-bold">
+                            <span className="text-gray-500">Physical Progress</span>
+                            <span className="text-[#01367d] font-black">{progressPct.toFixed(1)}%</span>
+                          </div>
+                          <div className="h-2 w-full rounded-full bg-gray-100 overflow-hidden">
+                            <div
+                              className="h-2 rounded-full transition-all duration-300"
+                              style={{
+                                width: `${progressPct}%`,
+                                backgroundColor: progressPct >= 90 ? '#10b981' : progressPct >= 50 ? '#01367d' : '#ffb241',
+                              }}
+                            />
+                          </div>
+                        </div>
+
+                        {/* Direct Dossier Routing CTA */}
+                        <div className="flex items-center justify-end pt-1 text-xs font-bold text-[#01367d] group-hover:text-[#ffb241] transition-colors">
+                          View Project Dossier &rarr;
+                        </div>
+                      </div>
+                    );
+                  })
+                )}
+              </div>
+
+              {/* Drawer Footer */}
+              <div className="p-4 bg-gray-50 border-t border-gray-200">
+                <button
+                  type="button"
+                  onClick={() => setActiveDrawerContractor(null)}
+                  className="w-full py-2.5 px-4 rounded-full border border-gray-300 bg-white text-xs font-bold text-gray-700 hover:bg-gray-100 transition shadow-xs"
+                >
+                  Close Drawer
+                </button>
+              </div>
+
+            </div>
+          </div>
+        </div>
+      )}
 
       {/* Full-Width Footer with #eeeeee Background & MAPATUNAI.png Asset */}
       <footer className="w-full mt-16 py-16 px-6 md:px-16 bg-[#eeeeee] text-[#01367d] border-t border-[#01367d]/15 space-y-8 text-center shadow-inner">
