@@ -283,11 +283,11 @@ export default function OverviewTab({ project, onNavigateTab }: OverviewTabProps
           Deep Navy (#011438), Royal Blue (#01367d), Gold (#ffb241) Aesthetic
           Zero emojis, monospace status badges with micro-dots
       ========================================================================= */}
-      <div className="rounded-3xl border border-[#01367d]/30 bg-gradient-to-br from-[#011438] via-[#012456] to-[#011438] p-6 sm:p-8 text-white shadow-xl space-y-6">
+      <div className="rounded-3xl border border-navy/30 bg-gradient-to-br from-navy-950 via-navy-800 to-navy-950 p-6 sm:p-8 text-white shadow-xl space-y-6">
         {/* Header Bar */}
         <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 border-b border-white/10 pb-5">
           <div className="flex items-center gap-3">
-            <div className="flex h-11 w-11 items-center justify-center rounded-2xl bg-[#01367d] text-[#ffb241] shadow-inner border border-white/10">
+            <div className="flex h-11 w-11 items-center justify-center rounded-2xl bg-navy text-amber shadow-inner border border-white/10">
               <BrainCircuit className="h-6 w-6" />
             </div>
             <div>
@@ -319,7 +319,7 @@ export default function OverviewTab({ project, onNavigateTab }: OverviewTabProps
                 )}
                 {auditReport.riskTier === 'MODERATE' && (
                   <span className="inline-flex items-center gap-1.5 rounded-full bg-amber-950/80 border border-amber-500/50 px-3 py-1 font-mono text-xs font-bold text-amber-300">
-                    <span className="h-2 w-2 rounded-full bg-[#ffb241]" />
+                    <span className="h-2 w-2 rounded-full bg-amber" />
                     RISK: MODERATE
                   </span>
                 )}
@@ -339,7 +339,7 @@ export default function OverviewTab({ project, onNavigateTab }: OverviewTabProps
                 )}
                 {auditReport.complianceStatus === 'UNDER_REVIEW' && (
                   <span className="inline-flex items-center gap-1.5 rounded-full bg-amber-950/80 border border-amber-500/50 px-3 py-1 font-mono text-xs font-bold text-amber-300">
-                    <span className="h-2 w-2 rounded-full bg-[#ffb241]" />
+                    <span className="h-2 w-2 rounded-full bg-amber" />
                     STATUS: UNDER REVIEW
                   </span>
                 )}
@@ -379,7 +379,7 @@ export default function OverviewTab({ project, onNavigateTab }: OverviewTabProps
                   Financial Payout
                 </span>
                 <div className="flex items-baseline justify-between">
-                  <span className="text-2xl font-mono font-black text-[#ffb241]">
+                  <span className="text-2xl font-mono font-black text-amber">
                     {auditReport.discrepancyAudit.financialPayoutPct}%
                   </span>
                   <span className="text-[11px] font-mono text-white/60">
@@ -388,7 +388,7 @@ export default function OverviewTab({ project, onNavigateTab }: OverviewTabProps
                 </div>
                 <div className="h-2 w-full rounded-full bg-white/10 overflow-hidden">
                   <div
-                    className="h-full rounded-full bg-[#ffb241]"
+                    className="h-full rounded-full bg-amber"
                     style={{
                       width: `${Math.min(100, auditReport.discrepancyAudit.financialPayoutPct)}%`,
                     }}
@@ -489,7 +489,7 @@ export default function OverviewTab({ project, onNavigateTab }: OverviewTabProps
           <div className="rounded-2xl bg-white/5 border border-white/10 p-5 backdrop-blur-sm space-y-3">
             <div className="flex flex-wrap items-center justify-between gap-2 border-b border-white/10 pb-3">
               <div className="flex items-center gap-2">
-                <Calendar className="h-4 w-4 text-[#ffb241]" />
+                <Calendar className="h-4 w-4 text-amber" />
                 <span className="text-xs font-mono font-bold uppercase tracking-wider text-white/80">
                   Temporal Satellite Ground-Truth Corroboration
                 </span>
@@ -499,7 +499,7 @@ export default function OverviewTab({ project, onNavigateTab }: OverviewTabProps
                   BASELINE: {auditReport.temporalComparison.baselineYear}
                 </span>
                 <span className="text-white/40">&rarr;</span>
-                <span className="bg-[#01367d] border border-blue-400/30 px-2.5 py-0.5 rounded-full text-blue-200">
+                <span className="bg-navy border border-blue-400/30 px-2.5 py-0.5 rounded-full text-blue-200">
                   PRESENT: {auditReport.temporalComparison.presentYear}
                 </span>
                 <span className="bg-emerald-500/20 border border-emerald-400/30 px-2.5 py-0.5 rounded-full text-emerald-300">
@@ -517,15 +517,15 @@ export default function OverviewTab({ project, onNavigateTab }: OverviewTabProps
         {auditReport?.actionableRecommendations && auditReport.actionableRecommendations.length > 0 && (
           <div className="rounded-2xl bg-white/5 border border-white/10 p-5 backdrop-blur-sm space-y-3">
             <div className="flex items-center gap-2">
-              <CheckCircle2 className="h-4 w-4 text-[#ffb241]" />
-              <span className="text-xs font-mono font-bold uppercase tracking-wider text-[#ffb241]">
+              <CheckCircle2 className="h-4 w-4 text-amber" />
+              <span className="text-xs font-mono font-bold uppercase tracking-wider text-amber">
                 Actionable Forensic Recommendations
               </span>
             </div>
             <div className="space-y-2.5 pt-1">
               {auditReport.actionableRecommendations.map((recommendation, idx) => (
                 <div key={idx} className="flex items-start gap-3 text-xs sm:text-sm text-slate-200">
-                  <span className="font-mono text-xs font-bold text-[#ffb241] bg-white/5 border border-white/10 px-2 py-0.5 rounded shrink-0 mt-0.5">
+                  <span className="font-mono text-xs font-bold text-amber bg-white/5 border border-white/10 px-2 py-0.5 rounded shrink-0 mt-0.5">
                     0{idx + 1}
                   </span>
                   <span className="leading-relaxed font-medium">{recommendation}</span>
@@ -543,9 +543,9 @@ export default function OverviewTab({ project, onNavigateTab }: OverviewTabProps
       ========================================================================= */}
       <div className="rounded-3xl border border-gray-200/80 bg-white shadow-sm overflow-hidden flex flex-col h-[520px]">
         {/* Header Bar */}
-        <div className="flex flex-wrap items-center justify-between gap-3 bg-[#011438] px-6 py-3.5 text-white border-b border-white/10 shrink-0">
+        <div className="flex flex-wrap items-center justify-between gap-3 bg-navy-950 px-6 py-3.5 text-white border-b border-white/10 shrink-0">
           <div className="flex items-center gap-3">
-            <div className="flex h-8 w-8 items-center justify-center rounded-xl bg-[#01367d] text-[#ffb241] shadow-xs">
+            <div className="flex h-8 w-8 items-center justify-center rounded-xl bg-navy text-amber shadow-xs">
               <Satellite className="h-4 w-4" />
             </div>
             <div>
@@ -565,7 +565,7 @@ export default function OverviewTab({ project, onNavigateTab }: OverviewTabProps
             <span className="rounded-full bg-blue-500/20 border border-blue-400/30 px-2.5 py-0.5 text-[10px] font-mono font-bold text-blue-300">
               ESRI WAYBACK
             </span>
-            <span className="rounded-full bg-[#ffb241] px-3 py-0.5 text-xs font-mono font-black text-[#011438] shadow-xs">
+            <span className="rounded-full bg-amber px-3 py-0.5 text-xs font-mono font-black text-navy-950 shadow-xs">
               YEAR {selectedYear}
             </span>
           </div>
@@ -582,11 +582,11 @@ export default function OverviewTab({ project, onNavigateTab }: OverviewTabProps
           )}
 
           {/* Map Floating Coordinates Overlay & Catalog Timestamp */}
-          <div className="pointer-events-none absolute top-3 left-3 rounded-xl bg-[#011438]/85 backdrop-blur-md px-3 py-2 text-xs font-mono text-white/90 border border-white/10 z-10 space-y-1 shadow-lg">
+          <div className="pointer-events-none absolute top-3 left-3 rounded-xl bg-navy-950/85 backdrop-blur-md px-3 py-2 text-xs font-mono text-white/90 border border-white/10 z-10 space-y-1 shadow-lg">
             <div className="flex items-center gap-2">
-              <span className="h-2 w-2 rounded-full bg-[#ffb241] animate-pulse" />
+              <span className="h-2 w-2 rounded-full bg-amber animate-pulse" />
               <span className="font-bold text-[11px] text-white">TARGET GPS:</span>
-              <span className="text-[#ffb241] font-mono text-[11px]">
+              <span className="text-amber font-mono text-[11px]">
                 {project.gpsLat && project.gpsLng
                   ? `${project.gpsLat.toFixed(5)}, ${project.gpsLng.toFixed(5)}`
                   : 'N/A'}
@@ -598,14 +598,14 @@ export default function OverviewTab({ project, onNavigateTab }: OverviewTabProps
           </div>
 
           {/* Interactive Horizontal Scrubber Dock */}
-          <div className="absolute bottom-3 inset-x-3 sm:inset-x-6 rounded-2xl bg-[#011438]/90 backdrop-blur-md border border-white/15 p-3 sm:p-4 text-white z-10 shadow-2xl space-y-2.5">
+          <div className="absolute bottom-3 inset-x-3 sm:inset-x-6 rounded-2xl bg-navy-950/90 backdrop-blur-md border border-white/15 p-3 sm:p-4 text-white z-10 shadow-2xl space-y-2.5">
             {/* Scrubber Header Controls */}
             <div className="flex items-center justify-between gap-2 text-xs">
               <button
                 onClick={() => setSelectedYear(baselineYear)}
                 className={`px-3 py-1 rounded-lg font-mono font-bold transition text-xs ${
                   selectedYear === baselineYear
-                    ? 'bg-[#ffb241] text-[#011438]'
+                    ? 'bg-amber text-navy-950'
                     : 'bg-white/10 text-white/80 hover:bg-white/20'
                 }`}
               >
@@ -615,16 +615,16 @@ export default function OverviewTab({ project, onNavigateTab }: OverviewTabProps
               {/* Play / Pause Timelapse Button */}
               <button
                 onClick={() => setIsPlaying(!isPlaying)}
-                className="flex items-center gap-1.5 px-3 py-1 rounded-lg bg-[#01367d] hover:bg-[#01449d] border border-blue-400/30 text-white font-mono text-xs font-bold transition shadow-xs"
+                className="flex items-center gap-1.5 px-3 py-1 rounded-lg bg-navy hover:bg-[#01449d] border border-blue-400/30 text-white font-mono text-xs font-bold transition shadow-xs"
               >
                 {isPlaying ? (
                   <>
-                    <Pause className="h-3.5 w-3.5 text-[#ffb241]" />
+                    <Pause className="h-3.5 w-3.5 text-amber" />
                     <span>PAUSE</span>
                   </>
                 ) : (
                   <>
-                    <Play className="h-3.5 w-3.5 text-[#ffb241]" />
+                    <Play className="h-3.5 w-3.5 text-amber" />
                     <span>TIMELAPSE</span>
                   </>
                 )}
@@ -634,7 +634,7 @@ export default function OverviewTab({ project, onNavigateTab }: OverviewTabProps
                 onClick={() => setSelectedYear(presentYear)}
                 className={`px-3 py-1 rounded-lg font-mono font-bold transition text-xs ${
                   selectedYear === presentYear
-                    ? 'bg-[#ffb241] text-[#011438]'
+                    ? 'bg-amber text-navy-950'
                     : 'bg-white/10 text-white/80 hover:bg-white/20'
                 }`}
               >
@@ -654,7 +654,7 @@ export default function OverviewTab({ project, onNavigateTab }: OverviewTabProps
                   setIsPlaying(false);
                   setSelectedYear(Number(e.target.value));
                 }}
-                className="w-full h-2 bg-white/20 rounded-lg appearance-none cursor-pointer accent-[#ffb241]"
+                className="w-full h-2 bg-white/20 rounded-lg appearance-none cursor-pointer accent-amber"
               />
             </div>
 
@@ -671,7 +671,7 @@ export default function OverviewTab({ project, onNavigateTab }: OverviewTabProps
                     }}
                     className={`px-2 py-0.5 rounded text-[11px] font-mono font-bold transition shrink-0 ${
                       isSelected
-                        ? 'bg-[#ffb241] text-[#011438] shadow-xs'
+                        ? 'bg-amber text-navy-950 shadow-xs'
                         : 'bg-white/5 text-white/60 hover:bg-white/15 hover:text-white'
                     }`}
                   >

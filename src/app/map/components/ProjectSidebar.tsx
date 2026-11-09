@@ -22,10 +22,10 @@ export default function ProjectSidebar({
   if (projects.length === 0) return null;
 
   return (
-    <div className="absolute top-24 right-4 z-20 w-84 bg-[#011438]/95 backdrop-blur-xl p-4 rounded-2xl border border-[#01367d] shadow-2xl space-y-3 max-h-[calc(100vh-140px)] overflow-y-auto text-white">
+    <div className="absolute top-24 right-4 z-20 w-84 bg-navy-950/95 backdrop-blur-xl p-4 rounded-2xl border border-navy shadow-2xl space-y-3 max-h-[calc(100vh-140px)] overflow-y-auto text-white">
       <div className="flex items-center justify-between border-b border-white/10 pb-2.5">
         <div className="flex items-center gap-2">
-          <span className="h-2 w-2 rounded-full bg-[#ffb241]" />
+          <span className="h-2 w-2 rounded-full bg-amber" />
           <span className="font-extrabold text-white text-xs uppercase tracking-wide">
             {title} ({projects.length})
           </span>
@@ -54,7 +54,7 @@ export default function ProjectSidebar({
             <button
               key={id}
               onClick={() => onSelectProject(id)}
-              className="w-full text-left p-3 rounded-xl border border-white/10 bg-white/5 hover:bg-white/10 hover:border-[#ffb241]/60 transition text-xs space-y-1.5 group"
+              className="w-full text-left p-3 rounded-xl border border-white/10 bg-white/5 hover:bg-white/10 hover:border-amber/60 transition text-xs space-y-1.5 group"
             >
               <div className="flex items-center justify-between">
                 <span className="font-mono text-[10px] text-slate-400">{id?.slice(0, 12)}</span>
@@ -69,10 +69,10 @@ export default function ProjectSidebar({
                       DELAYED
                     </span>
                   )}
-                  <span className="text-[10px] font-bold text-[#ffb241]">{progress.toFixed(0)}%</span>
+                  <span className="text-[10px] font-bold text-amber">{progress.toFixed(0)}%</span>
                 </div>
               </div>
-              <p className="font-bold text-slate-100 group-hover:text-[#ffb241] line-clamp-2 text-xs leading-snug transition-colors">
+              <p className="font-bold text-slate-100 group-hover:text-amber line-clamp-2 text-xs leading-snug transition-colors">
                 {name}
               </p>
               <div className="flex items-center justify-between pt-1 border-t border-white/5">

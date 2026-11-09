@@ -9,7 +9,7 @@ export function MainLayoutWrapper({ children }: { children: React.ReactNode }) {
 
   if (isFullscreenRoute) {
     return (
-      <main className="w-full h-[calc(100vh-65px)] overflow-hidden p-0 m-0">
+      <main id="main-content" className="w-full h-[calc(100dvh-4rem)] overflow-hidden p-0 m-0">
         {children}
       </main>
     );
@@ -17,14 +17,14 @@ export function MainLayoutWrapper({ children }: { children: React.ReactNode }) {
 
   if (isFullWidthPage) {
     return (
-      <main className="w-full p-0 m-0 overflow-x-hidden bg-[#f4f6fb]">
+      <main id="main-content" className="w-full p-0 m-0 overflow-x-hidden bg-canvas">
         {children}
       </main>
     );
   }
 
   return (
-    <main className="w-full px-4 sm:px-8 py-8 min-h-[calc(100vh-65px)] bg-[#eeeeee]">
+    <main id="main-content" className="w-full px-4 sm:px-8 py-8 min-h-[calc(100dvh-4rem)] bg-canvas">
       {children}
     </main>
   );

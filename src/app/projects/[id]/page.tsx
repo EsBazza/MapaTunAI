@@ -2,7 +2,7 @@
 
 import { useState, use, useEffect } from 'react';
 import Link from 'next/link';
-import Image from 'next/image';
+import { SiteFooter } from '@/components/site-footer';
 import {
   MapPin,
   Building2,
@@ -63,9 +63,9 @@ export default function ProjectDossierPage({ params }: PageProps) {
 
   if (isLoading) {
     return (
-      <div className="flex min-h-screen items-center justify-center bg-[#011438] text-white">
+      <div className="flex min-h-screen items-center justify-center bg-navy-950 text-white">
         <div className="flex flex-col items-center gap-3">
-          <Loader2 className="h-8 w-8 animate-spin text-[#ffb241]" />
+          <Loader2 className="h-8 w-8 animate-spin text-amber" />
           <p className="text-sm font-bold tracking-wide text-white">
             Loading public infrastructure dossier...
           </p>
@@ -77,8 +77,8 @@ export default function ProjectDossierPage({ params }: PageProps) {
 
   if (error || !project) {
     return (
-      <div className="flex min-h-screen flex-col items-center justify-center bg-[#011438] px-4 text-center text-white">
-        <ShieldAlert className="h-12 w-12 text-[#ffb241] mb-3" />
+      <div className="flex min-h-screen flex-col items-center justify-center bg-navy-950 px-4 text-center text-white">
+        <ShieldAlert className="h-12 w-12 text-amber mb-3" />
         <h2 className="text-xl font-black text-white">Project Record Not Found</h2>
         <p className="text-xs text-white/70 max-w-sm mt-1 mb-6">
           Could not retrieve contract details for ID <strong className="font-mono text-white">{id}</strong>.
@@ -86,7 +86,7 @@ export default function ProjectDossierPage({ params }: PageProps) {
         </p>
         <Link
           href="/map"
-          className="rounded-full bg-[#ffb241] px-6 py-2.5 text-xs font-black text-[#011438] hover:bg-amber-300 transition"
+          className="rounded-full bg-amber px-6 py-2.5 text-xs font-black text-navy-950 hover:bg-amber-300 transition"
         >
           Return to National Map &rarr;
         </Link>
@@ -103,33 +103,33 @@ export default function ProjectDossierPage({ params }: PageProps) {
   ];
 
   return (
-    <div className="min-h-screen bg-[#f4f6fb] text-gray-900 selection:bg-[#ffb241]/30 pb-20">
+    <div className="min-h-screen bg-canvas text-gray-900 selection:bg-amber/30 pb-20">
       {/* --- HERO SECTION (Homepage Deep Navy Aesthetic) ---------- */}
-      <div className="relative w-full bg-[#011438] text-white px-6 sm:px-12 lg:px-16 pt-8 pb-12 rounded-b-[40px] shadow-2xl border-b border-[#01367d]/40 overflow-hidden">
+      <div className="relative w-full bg-navy-950 text-white px-6 sm:px-12 lg:px-16 pt-8 pb-12 rounded-b-[40px] shadow-2xl border-b border-navy/40 overflow-hidden">
         {/* Layer 0: Subtle Dual Asset Overlay */}
         <div
           className="absolute inset-0 bg-cover bg-center opacity-25 mix-blend-screen pointer-events-none"
-          style={{ backgroundImage: "url('/bg2.png')" }}
+          style={{ backgroundImage: "url('/bg2.jpg')" }}
         />
         <div
           className="absolute inset-0 bg-cover bg-center opacity-30 mix-blend-overlay pointer-events-none"
-          style={{ backgroundImage: "url('/bg1.png')" }}
+          style={{ backgroundImage: "url('/bg1.jpg')" }}
         />
-        <div className="absolute inset-0 bg-gradient-to-r from-[#012456]/95 via-[#01367d]/85 to-[#011438]/95 pointer-events-none" />
+        <div className="absolute inset-0 bg-gradient-to-r from-navy-800/95 via-navy/85 to-navy-950/95 pointer-events-none" />
 
         <div className="relative z-10 mx-auto max-w-7xl space-y-6">
           {/* Breadcrumb navigation */}
           <nav className="flex flex-wrap items-center gap-2 text-xs font-semibold text-white/70">
             <Link
               href="/"
-              className="flex items-center gap-1 text-white hover:text-[#ffb241] transition"
+              className="flex items-center gap-1 text-white hover:text-amber transition"
             >
               <span>MAPATUNAI</span>
             </Link>
             <ChevronRight className="h-3 w-3 text-white/40" />
             <Link
               href={`/map?project=${encodeURIComponent(project.id)}`}
-              className="flex items-center gap-1 font-bold text-[#ffb241] hover:underline transition"
+              className="flex items-center gap-1 font-bold text-amber hover:underline transition"
             >
               <MapPin className="h-3.5 w-3.5" />
               <span>National Map</span>
@@ -152,13 +152,13 @@ export default function ProjectDossierPage({ params }: PageProps) {
             )}
             {project.flagStalled && (
               <span className="inline-flex items-center gap-1.5 rounded-full border border-amber-500/40 bg-amber-950/60 px-3 py-1 font-bold text-amber-200">
-                <span className="h-2 w-2 rounded-full bg-[#ffb241]" />
+                <span className="h-2 w-2 rounded-full bg-amber" />
                 STALLED WORKS
               </span>
             )}
             {project.flagOverdue && (
               <span className="inline-flex items-center gap-1.5 rounded-full border border-amber-500/30 bg-amber-900/40 px-3 py-1 font-semibold text-amber-200">
-                <span className="h-1.5 w-1.5 rounded-full bg-[#ffb241]" />
+                <span className="h-1.5 w-1.5 rounded-full bg-amber" />
                 OVERDUE MILESTONE
               </span>
             )}
@@ -187,12 +187,12 @@ export default function ProjectDossierPage({ params }: PageProps) {
             <div className="flex flex-wrap items-center gap-5 text-xs text-white/80 mt-3 font-semibold">
               <Link
                 href={`/contractors?q=${encodeURIComponent(contractorName)}`}
-                className="inline-flex items-center gap-1.5 text-white hover:text-[#ffb241] transition group"
+                className="inline-flex items-center gap-1.5 text-white hover:text-amber transition group"
                 title="View Contractor Profile in Registry"
               >
-                <Building2 className="h-4 w-4 text-[#ffb241]" />
+                <Building2 className="h-4 w-4 text-amber" />
                 <span className="text-sm font-bold group-hover:underline">{contractorName}</span>
-                <ExternalLink className="h-3 w-3 text-white/50 group-hover:text-[#ffb241]" />
+                <ExternalLink className="h-3 w-3 text-white/50 group-hover:text-amber" />
               </Link>
               <div className="flex items-center gap-1.5">
                 <Calendar className="h-4 w-4 text-white/60" />
@@ -225,7 +225,7 @@ export default function ProjectDossierPage({ params }: PageProps) {
               <span className="text-[10px] font-mono font-bold uppercase tracking-wider text-white/60">
                 Amount Disbursed
               </span>
-              <p className="text-xl sm:text-2xl font-mono font-black text-[#ffb241] mt-1">
+              <p className="text-xl sm:text-2xl font-mono font-black text-amber mt-1">
                 {formatCurrency(project.amountPaid)}
               </p>
               <span className="text-[10px] text-white/60 font-mono">
@@ -280,7 +280,7 @@ export default function ProjectDossierPage({ params }: PageProps) {
               }
               target="_blank"
               rel="noopener noreferrer"
-              className="inline-flex items-center gap-2 rounded-full bg-[#ffb241] px-5 py-2.5 text-xs font-black text-[#011438] shadow hover:bg-amber-300 transition"
+              className="inline-flex items-center gap-2 rounded-full bg-amber px-5 py-2.5 text-xs font-black text-navy-950 shadow hover:bg-amber-300 transition"
             >
               <FileText className="h-4 w-4" />
               <span>View Document &rarr;</span>
@@ -298,7 +298,7 @@ export default function ProjectDossierPage({ params }: PageProps) {
       </div>
 
       {/* --- TAB NAVIGATION STRIP (Homepage Aesthetic) ----------- */}
-      <div className="sticky top-0 z-30 border-b border-[#01367d]/15 bg-white/95 backdrop-blur-md px-6 sm:px-12 lg:px-16 shadow-xs">
+      <div className="sticky top-0 z-30 border-b border-navy/15 bg-white/95 backdrop-blur-md px-6 sm:px-12 lg:px-16 shadow-xs">
         <div className="mx-auto max-w-7xl">
           <div className="flex space-x-2 overflow-x-auto py-3 scrollbar-none">
             {tabs.map((tab) => {
@@ -309,7 +309,7 @@ export default function ProjectDossierPage({ params }: PageProps) {
                   onClick={() => handleTabChange(tab.id)}
                   className={`flex items-center gap-2 whitespace-nowrap rounded-full px-5 py-2 text-xs font-black transition-all ${
                     isActive
-                      ? 'bg-[#01367d] text-white shadow-md'
+                      ? 'bg-navy text-white shadow-md'
                       : 'text-gray-600 hover:bg-gray-100 hover:text-gray-900'
                   }`}
                 >
@@ -318,7 +318,7 @@ export default function ProjectDossierPage({ params }: PageProps) {
                     <span
                       className={`rounded-full px-2 py-0.5 text-[10px] font-mono ${
                         isActive
-                          ? 'bg-[#ffb241] text-[#011438] font-bold'
+                          ? 'bg-amber text-navy-950 font-bold'
                           : 'bg-gray-200 text-gray-700'
                       }`}
                     >
@@ -342,29 +342,7 @@ export default function ProjectDossierPage({ params }: PageProps) {
           <CommunityTab project={project} onReviewSubmitted={() => refetch()} />
         </div>
       </main>
-
-      {/* --- FULL-WIDTH FOOTER (Homepage Aesthetic) ------------- */}
-      <footer className="w-full mt-16 py-12 px-6 md:px-16 bg-[#eeeeee] text-[#01367d] border-t border-[#01367d]/15 text-center">
-        <div className="max-w-3xl mx-auto space-y-3">
-          <div className="flex items-center justify-center">
-            <Image
-              src="/MAPATUNAI.png"
-              alt="MAPATUNAI Logo"
-              width={140}
-              height={40}
-              className="h-8 w-auto object-contain"
-            />
-          </div>
-          <p className="text-xs text-[#01367d]/80 font-medium">
-            MapaTunAI public infrastructure forensic dossiers are compiled from official DPWH disclosures and satellite ground-truth records.
-          </p>
-          <div className="flex justify-center gap-4 text-xs font-bold pt-1">
-            <Link href="/map" className="hover:text-[#ffb241]">Interactive Map</Link>
-            <span>•</span>
-            <Link href="/contractors" className="hover:text-[#ffb241]">Contractor Registry</Link>
-          </div>
-        </div>
-      </footer>
+      <SiteFooter className="mt-16" />
     </div>
   );
 }

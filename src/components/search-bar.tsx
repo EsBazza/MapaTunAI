@@ -95,7 +95,7 @@ export function SearchBar() {
               if (suggestions.length > 0) setIsOpen(true);
             }}
             placeholder="Search projects, contract IDs, location..."
-            className="w-full rounded-full border border-[#01367d]/20 bg-white px-4 py-2 pl-10 text-xs sm:text-sm text-[#01367d] font-medium placeholder:text-gray-400 focus:border-[#01367d] focus:outline-none focus:ring-2 focus:ring-[#01367d]/20 shadow-sm transition-all"
+            className="w-full rounded-full border border-navy/20 bg-white px-4 py-2 pl-10 text-xs sm:text-sm text-navy font-medium placeholder:text-gray-400 focus:border-navy focus:outline-none focus:ring-2 focus:ring-navy/20 shadow-sm transition-all"
           />
           <svg
             className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-gray-400"

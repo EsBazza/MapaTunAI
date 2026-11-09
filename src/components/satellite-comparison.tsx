@@ -399,7 +399,7 @@ export default function SatelliteComparison({
             ) : (
               <div ref={leftMapContainer} className="h-full w-full" />
             )}
-            <div className="pointer-events-none absolute bottom-2 left-2 rounded bg-[#011438]/90 px-2 py-1 text-[10px] font-mono text-white/80 border border-white/10">
+            <div className="pointer-events-none absolute bottom-2 left-2 rounded bg-navy-950/90 px-2 py-1 text-[10px] font-mono text-white/80 border border-white/10">
               Target: {lat.toFixed(4)}, {lng.toFixed(4)}
             </div>
           </div>
@@ -450,7 +450,7 @@ export default function SatelliteComparison({
             ) : (
               <div ref={rightMapContainer} className="h-full w-full" />
             )}
-            <div className="pointer-events-none absolute bottom-2 left-2 rounded bg-[#011438]/90 px-2 py-1 text-[10px] font-mono text-white/80 border border-white/10">
+            <div className="pointer-events-none absolute bottom-2 left-2 rounded bg-navy-950/90 px-2 py-1 text-[10px] font-mono text-white/80 border border-white/10">
               Target: {lat.toFixed(4)}, {lng.toFixed(4)}
             </div>
           </div>

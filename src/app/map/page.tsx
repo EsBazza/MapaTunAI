@@ -994,8 +994,8 @@ function MapContent() {
 
       {/* Near Me 5km Search Radius Radar Indicator */}
       {nearMeCoords && (
-        <div className="absolute bottom-6 left-1/2 -translate-x-1/2 z-20 bg-[#011438]/95 border border-[#01367d] text-white px-5 py-2.5 rounded-full font-mono text-xs flex items-center gap-3 shadow-2xl backdrop-blur-md">
-          <span className="h-2 w-2 rounded-full bg-[#ffb241] animate-ping" />
+        <div className="absolute bottom-6 left-1/2 -translate-x-1/2 z-20 bg-navy-950/95 border border-navy text-white px-5 py-2.5 rounded-full font-mono text-xs flex items-center gap-3 shadow-2xl backdrop-blur-md">
+          <span className="h-2 w-2 rounded-full bg-amber animate-ping" />
           <span className="font-bold tracking-wider">SEARCH RADIUS: 5.0 KM (SCANNING NEARBY INFRASTRUCTURE)</span>
           <button onClick={() => setNearMeCoords(null)} className="ml-2 text-slate-400 hover:text-white font-bold">&times;</button>
         </div>

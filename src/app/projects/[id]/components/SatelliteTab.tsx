@@ -17,11 +17,11 @@ export default function SatelliteTab({ project }: SatelliteTabProps) {
       <div className="rounded-3xl border border-gray-200/80 bg-white p-6 sm:p-8 shadow-sm space-y-5">
         <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 border-b border-gray-100 pb-4">
           <div className="flex items-center gap-3">
-            <div className="flex h-10 w-10 items-center justify-center rounded-2xl bg-[#01367d] text-[#ffb241] shadow-sm">
+            <div className="flex h-10 w-10 items-center justify-center rounded-2xl bg-navy text-amber shadow-sm">
               <Eye className="h-5 w-5" />
             </div>
             <div>
-              <h3 className="text-lg font-black text-[#01367d] tracking-tight">
+              <h3 className="text-lg font-black text-navy tracking-tight">
                 AI Multimodal Satellite Vision Audit
               </h3>
               <span className="text-xs font-mono font-bold text-gray-400">
@@ -66,10 +66,10 @@ export default function SatelliteTab({ project }: SatelliteTabProps) {
           </div>
         </div>
 
-        <div className="rounded-2xl bg-[#011438] text-white p-4 text-xs font-medium flex items-center justify-between gap-4">
+        <div className="rounded-2xl bg-navy-950 text-white p-4 text-xs font-medium flex items-center justify-between gap-4">
           <div className="flex items-center gap-2.5">
-            <span className="h-2 w-2 rounded-full bg-[#ffb241]" />
-            <span>Target Coordinates: <strong className="font-mono text-[#ffb241]">{project.gpsLat.toFixed(4)}, {project.gpsLng.toFixed(4)}</strong></span>
+            <span className="h-2 w-2 rounded-full bg-amber" />
+            <span>Target Coordinates: <strong className="font-mono text-amber">{project.gpsLat.toFixed(4)}, {project.gpsLng.toFixed(4)}</strong></span>
           </div>
           <span className="text-white/60 font-mono text-[11px] hidden sm:inline">
             Catalog: ESRI World Imagery Wayback (2014-2026)

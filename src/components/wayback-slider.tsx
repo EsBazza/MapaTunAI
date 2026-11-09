@@ -183,7 +183,7 @@ export default function WaybackSlider({
             }}
             className={`px-2.5 py-1 rounded-full font-bold transition flex items-center gap-1 border ${
               compareMode
-                ? 'bg-[#01367d] text-white border-[#01367d] shadow-sm'
+                ? 'bg-navy text-white border-navy shadow-sm'
                 : 'bg-white text-gray-700 border-gray-200 hover:bg-gray-50'
             }`}
           >
@@ -270,9 +270,9 @@ export default function WaybackSlider({
         )}
 
         {/* Floating Release Badge */}
-        <div className="absolute top-2.5 left-2.5 z-10 rounded-md bg-[#011438]/90 px-2.5 py-1 text-[11px] font-mono font-bold text-white backdrop-blur-md border border-white/20 shadow-md">
+        <div className="absolute top-2.5 left-2.5 z-10 rounded-md bg-navy-950/90 px-2.5 py-1 text-[11px] font-mono font-bold text-white backdrop-blur-md border border-white/20 shadow-md">
           ESRI Wayback {activeRelease.year} &middot;{' '}
-          <span className="text-[#ffb241] font-mono">{activeRelease.releaseDate}</span>
+          <span className="text-amber font-mono">{activeRelease.releaseDate}</span>
         </div>
 
         {/* Center Crosshair Pin */}

@@ -123,7 +123,7 @@ function SearchContent() {
               value={inputQuery}
               onChange={(e) => setInputQuery(e.target.value)}
               placeholder="Search by project name, contractor, contract ID, region, or keyword..."
-              className="w-full rounded-full border border-gray-300 bg-gray-50 py-3.5 pl-12 pr-28 text-base text-gray-900 placeholder:text-gray-400 focus:border-[#01367d] focus:bg-white focus:outline-none focus:ring-2 focus:ring-[#01367d]/20"
+              className="w-full rounded-full border border-gray-300 bg-gray-50 py-3.5 pl-12 pr-28 text-base text-gray-900 placeholder:text-gray-400 focus:border-navy focus:bg-white focus:outline-none focus:ring-2 focus:ring-navy/20"
             />
 
             <div className="absolute right-2.5 flex items-center gap-1.5">
@@ -141,7 +141,7 @@ function SearchContent() {
               )}
               <button
                 type="submit"
-                className="rounded-full bg-[#01367d] px-5 py-2 text-sm font-extrabold text-white shadow-md hover:bg-[#ffb241] hover:text-[#01367d] transition"
+                className="rounded-full bg-navy px-5 py-2 text-sm font-extrabold text-white shadow-md hover:bg-amber hover:text-navy transition"
               >
                 Search
               </button>

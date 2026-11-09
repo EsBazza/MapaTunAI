@@ -1,8 +1,11 @@
 /**
  * Format a PHP currency value with peso sign.
- * Uses M for millions, B for billions.
+ * Uses K for thousands, M for millions, B for billions, T for trillions.
  */
 export function formatCurrency(value: number): string {
+  if (value >= 1_000_000_000_000) {
+    return `₱${(value / 1_000_000_000_000).toFixed(2)}T`;
+  }
   if (value >= 1_000_000_000) {
     return `₱${(value / 1_000_000_000).toFixed(2)}B`;
   }

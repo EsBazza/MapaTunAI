@@ -225,14 +225,14 @@ export default function DrillDownPanel({
   };
 
   return (
-    <div className="absolute top-4 left-1/2 -translate-x-1/2 z-30 w-[96%] max-w-6xl bg-[#011438]/95 backdrop-blur-xl rounded-2xl border border-[#01367d]/70 shadow-2xl flex flex-col gap-2.5 p-3 text-white">
+    <div className="absolute top-4 left-1/2 -translate-x-1/2 z-30 w-[96%] max-w-6xl bg-navy-950/95 backdrop-blur-xl rounded-2xl border border-navy/70 shadow-2xl flex flex-col gap-2.5 p-3 text-white">
       {/* -- ROW 1: Breadcrumbs + In-HUD Search + Near Me + Counters -- */}
       <div className="flex flex-wrap items-center justify-between gap-3">
         {/* Breadcrumb Hierarchy Navigation */}
         <div className="flex items-center gap-1 text-[11px] font-mono text-slate-300 shrink-0">
           <button
             onClick={() => navigateTo('root')}
-            className="hover:text-[#ffb241] px-1.5 py-0.5 rounded transition font-bold"
+            className="hover:text-amber px-1.5 py-0.5 rounded transition font-bold"
           >
             PH
           </button>
@@ -241,7 +241,7 @@ export default function DrillDownPanel({
               <span className="text-slate-500">/</span>
               <button
                 onClick={() => navigateTo('region')}
-                className="hover:text-[#ffb241] px-1.5 py-0.5 rounded transition"
+                className="hover:text-amber px-1.5 py-0.5 rounded transition"
               >
                 {region.replace(/\s*\(.*\)/, '').slice(0, 16)}
               </button>
@@ -252,7 +252,7 @@ export default function DrillDownPanel({
               <span className="text-slate-500">/</span>
               <button
                 onClick={() => navigateTo('province')}
-                className="hover:text-[#ffb241] px-1.5 py-0.5 rounded transition text-[#ffb241]"
+                className="hover:text-amber px-1.5 py-0.5 rounded transition text-amber"
               >
                 {province}
               </button>
@@ -263,7 +263,7 @@ export default function DrillDownPanel({
               <span className="text-slate-500">/</span>
               <button
                 onClick={() => navigateTo('municipality')}
-                className="hover:text-[#ffb241] px-1.5 py-0.5 rounded transition text-emerald-400"
+                className="hover:text-amber px-1.5 py-0.5 rounded transition text-emerald-400"
               >
                 {municipality}
               </button>
@@ -282,7 +282,7 @@ export default function DrillDownPanel({
           <div className="relative">
             <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none text-slate-400">
               {isSearching ? (
-                <div className="w-3.5 h-3.5 border-2 border-[#ffb241] border-t-transparent rounded-full animate-spin" />
+                <div className="w-3.5 h-3.5 border-2 border-amber border-t-transparent rounded-full animate-spin" />
               ) : (
                 <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                   <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.5} d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" />
@@ -300,7 +300,7 @@ export default function DrillDownPanel({
                 if (searchResults.length > 0) setShowDropdown(true);
               }}
               placeholder="Search 246k+ projects, contractors, locations..."
-              className="w-full bg-[#012456]/80 text-white placeholder-slate-400 text-xs font-semibold pl-9 pr-8 py-2 rounded-xl border border-[#01367d] focus:border-[#ffb241] focus:ring-1 focus:ring-[#ffb241] focus:outline-none transition-all"
+              className="w-full bg-navy-800/80 text-white placeholder-slate-400 text-xs font-semibold pl-9 pr-8 py-2 rounded-xl border border-navy focus:border-amber focus:ring-1 focus:ring-amber focus:outline-none transition-all"
             />
             {searchQuery && (
               <button
@@ -318,7 +318,7 @@ export default function DrillDownPanel({
 
           {/* Search Autocomplete Dropdown */}
           {showDropdown && searchResults.length > 0 && (
-            <div className="absolute left-0 right-0 mt-1.5 bg-[#011438] border border-[#01367d] rounded-xl shadow-2xl overflow-hidden z-50 divide-y divide-white/5 max-h-72 overflow-y-auto">
+            <div className="absolute left-0 right-0 mt-1.5 bg-navy-950 border border-navy rounded-xl shadow-2xl overflow-hidden z-50 divide-y divide-white/5 max-h-72 overflow-y-auto">
               {searchResults.map((item) => (
                 <button
                   key={item.id}
@@ -326,11 +326,11 @@ export default function DrillDownPanel({
                   className="w-full text-left p-2.5 hover:bg-white/10 transition flex flex-col gap-0.5 group"
                 >
                   <div className="flex items-center justify-between gap-2">
-                    <span className="text-xs font-bold text-slate-100 group-hover:text-[#ffb241] truncate">
+                    <span className="text-xs font-bold text-slate-100 group-hover:text-amber truncate">
                       {item.name}
                     </span>
                     {item.budgetPHP !== undefined && (
-                      <span className="text-[11px] font-mono font-bold text-[#ffb241] shrink-0">
+                      <span className="text-[11px] font-mono font-bold text-amber shrink-0">
                         {formatCurrency(item.budgetPHP)}
                       </span>
                     )}
@@ -357,13 +357,13 @@ export default function DrillDownPanel({
             disabled={isLocating}
             className={`inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl text-xs font-bold transition-all border shadow-sm ${
               isLocating
-                ? 'bg-[#ffb241] text-[#011438] border-[#ffb241] animate-pulse'
-                : 'bg-white/10 hover:bg-white/20 text-white border-white/15 hover:border-[#ffb241]/60'
+                ? 'bg-amber text-navy-950 border-amber animate-pulse'
+                : 'bg-white/10 hover:bg-white/20 text-white border-white/15 hover:border-amber/60'
             }`}
             title="Center map on your current GPS coordinates"
           >
             <svg
-              className={`w-3.5 h-3.5 ${isLocating ? 'animate-spin' : 'text-[#ffb241]'}`}
+              className={`w-3.5 h-3.5 ${isLocating ? 'animate-spin' : 'text-amber'}`}
               fill="none"
               stroke="currentColor"
               viewBox="0 0 24 24"
@@ -392,7 +392,7 @@ export default function DrillDownPanel({
               onClick={() => setBasemap('satellite')}
               className={`px-2 py-1 rounded-lg transition-all ${
                 basemap === 'satellite'
-                  ? 'bg-[#ffb241] text-[#011438] font-bold shadow-xs'
+                  ? 'bg-amber text-navy-950 font-bold shadow-xs'
                   : 'text-slate-300 hover:text-white'
               }`}
             >
@@ -402,7 +402,7 @@ export default function DrillDownPanel({
               onClick={() => setBasemap('dark')}
               className={`px-2 py-1 rounded-lg transition-all ${
                 basemap === 'dark'
-                  ? 'bg-[#ffb241] text-[#011438] font-bold shadow-xs'
+                  ? 'bg-amber text-navy-950 font-bold shadow-xs'
                   : 'text-slate-300 hover:text-white'
               }`}
             >
@@ -412,7 +412,7 @@ export default function DrillDownPanel({
               onClick={() => setBasemap('streets')}
               className={`px-2 py-1 rounded-lg transition-all ${
                 basemap === 'streets'
-                  ? 'bg-[#ffb241] text-[#011438] font-bold shadow-xs'
+                  ? 'bg-amber text-navy-950 font-bold shadow-xs'
                   : 'text-slate-300 hover:text-white'
               }`}
             >
@@ -434,7 +434,7 @@ export default function DrillDownPanel({
         <select
           value={region}
           onChange={(e) => setRegion(e.target.value)}
-          className="rounded-lg border border-[#01367d] bg-[#012456] px-2.5 py-1 text-xs font-semibold text-slate-200 focus:outline-none focus:border-[#ffb241]"
+          className="rounded-lg border border-navy bg-navy-800 px-2.5 py-1 text-xs font-semibold text-slate-200 focus:outline-none focus:border-amber"
         >
           <option value="">All Regions</option>
           {sortedRegions.map((r) => (
@@ -446,7 +446,7 @@ export default function DrillDownPanel({
           <select
             value={province}
             onChange={(e) => setProvince(e.target.value)}
-            className="rounded-lg border border-[#01367d] bg-[#012456] px-2.5 py-1 text-xs font-semibold text-slate-200 focus:outline-none focus:border-[#ffb241]"
+            className="rounded-lg border border-navy bg-navy-800 px-2.5 py-1 text-xs font-semibold text-slate-200 focus:outline-none focus:border-amber"
           >
             <option value="">All Provinces</option>
             {currentProvinces.map((p) => (
@@ -463,7 +463,7 @@ export default function DrillDownPanel({
               const cityItem = currentCities.find((c) => c.name === val);
               setMunicipality(val, cityItem?.file);
             }}
-            className="rounded-lg border border-[#01367d] bg-[#012456] px-2.5 py-1 text-xs font-semibold text-slate-200 focus:outline-none focus:border-[#ffb241]"
+            className="rounded-lg border border-navy bg-navy-800 px-2.5 py-1 text-xs font-semibold text-slate-200 focus:outline-none focus:border-amber"
           >
             <option value="">All Cities / Muni</option>
             {currentCities.map((c) => (
@@ -480,7 +480,7 @@ export default function DrillDownPanel({
               const bObj = barangays.find((b) => b.name === val);
               setBarangay(val, bObj?.bounds);
             }}
-            className="rounded-lg border border-[#01367d] bg-[#012456] px-2.5 py-1 text-xs font-semibold text-slate-200 focus:outline-none focus:border-[#ffb241]"
+            className="rounded-lg border border-navy bg-navy-800 px-2.5 py-1 text-xs font-semibold text-slate-200 focus:outline-none focus:border-amber"
           >
             <option value="">All Barangays</option>
             {barangays.map((b) => (

@@ -2,7 +2,7 @@
 
 import { useState, useEffect } from 'react';
 import { useRouter } from 'next/navigation';
-import Image from 'next/image';
+import { SiteFooter } from '@/components/site-footer';
 import { useContractors } from '@/hooks/use-projects';
 import { formatCurrency } from '@/lib/format';
 
@@ -129,34 +129,34 @@ export default function ContractorsPage() {
   };
 
   return (
-    <div className="w-full min-h-screen bg-[#f4f6fb] text-gray-900 p-0 m-0 overflow-x-hidden font-sans">
+    <div className="w-full min-h-screen bg-canvas text-gray-900 p-0 m-0 overflow-x-hidden font-sans">
       
       {/* -- Top Header Hero Banner (Klatschboard Premium Style) -------- */}
-      <div className="relative w-full bg-[#011438] text-white px-6 sm:px-12 lg:px-16 pt-10 pb-16 rounded-b-[48px] shadow-2xl border-b border-[#01367d]/40">
+      <div className="relative w-full bg-navy-950 text-white px-6 sm:px-12 lg:px-16 pt-10 pb-16 rounded-b-[48px] shadow-2xl border-b border-navy/40">
         
         {/* Layer 0: Dual Asset Overlay */}
         <div
           className="absolute inset-0 bg-cover bg-center opacity-30 mix-blend-screen pointer-events-none rounded-b-[48px]"
-          style={{ backgroundImage: "url('/bg2.png')" }}
+          style={{ backgroundImage: "url('/bg2.jpg')" }}
         />
         <div
           className="absolute inset-0 bg-cover bg-center opacity-40 mix-blend-overlay pointer-events-none rounded-b-[48px]"
-          style={{ backgroundImage: "url('/bg1.png')" }}
+          style={{ backgroundImage: "url('/bg1.jpg')" }}
         />
-        <div className="absolute inset-0 bg-gradient-to-r from-[#012456]/95 via-[#01367d]/85 to-[#011438]/95 pointer-events-none rounded-b-[48px]" />
+        <div className="absolute inset-0 bg-gradient-to-r from-navy-800/95 via-navy/85 to-navy-950/95 pointer-events-none rounded-b-[48px]" />
 
         <div className="relative z-10 flex flex-col lg:flex-row lg:items-center justify-between gap-8">
           
           {/* Brand & Page Title */}
           <div className="space-y-2">
             <div className="inline-flex items-center gap-2 rounded-full bg-white/10 px-4 py-1.5 text-xs font-black text-white border border-white/20 backdrop-blur-md">
-              <span className="h-2 w-2 rounded-full bg-[#ffb241]" />
+              <span className="h-2 w-2 rounded-full bg-amber" />
               NATIONAL CONTRACTOR ACCOUNTABILITY REGISTRY
             </div>
             <h1 className="text-4xl sm:text-5xl lg:text-6xl font-black tracking-tight text-white uppercase leading-none">
-              <span className="text-[#a80101]">MAPA</span>
-              <span className="text-[#eeeeee]">TUN</span>
-              <span className="text-[#ffb241]">AI</span> Contractors
+              <span className="text-signal">MAPA</span>
+              <span className="text-canvas">TUN</span>
+              <span className="text-amber">AI</span> Contractors
             </h1>
             <p className="text-sm sm:text-base text-white/85 max-w-2xl font-medium leading-relaxed">
               Explore joint-venture co-occurrences, historical project delays, and dominant contractors across 248,000+ public works contracts.
@@ -173,7 +173,7 @@ export default function ContractorsPage() {
                 onClick={() => setFilterRisk('all')}
                 className={`px-4 py-2 rounded-full transition-all duration-200 ${
                   filterRisk === 'all'
-                    ? 'bg-white text-[#01367d] font-black shadow-md scale-105'
+                    ? 'bg-white text-navy font-black shadow-md scale-105'
                     : 'text-white/80 hover:text-white'
                 }`}
               >
@@ -193,7 +193,7 @@ export default function ContractorsPage() {
                 onClick={() => setFilterRisk('overdue')}
                 className={`px-4 py-2 rounded-full transition-all duration-200 ${
                   filterRisk === 'overdue'
-                    ? 'bg-[#ffb241] text-[#01367d] font-black shadow-md scale-105'
+                    ? 'bg-amber text-navy font-black shadow-md scale-105'
                     : 'text-white/80 hover:text-white'
                 }`}
               >
@@ -203,7 +203,7 @@ export default function ContractorsPage() {
                 onClick={() => setFilterRisk('highrisk')}
                 className={`px-4 py-2 rounded-full transition-all duration-200 ${
                   filterRisk === 'highrisk'
-                    ? 'bg-[#a80101] text-white font-black shadow-md scale-105'
+                    ? 'bg-signal text-white font-black shadow-md scale-105'
                     : 'text-white/80 hover:text-white'
                 }`}
               >
@@ -214,7 +214,7 @@ export default function ContractorsPage() {
             {/* Top Right Map CTA */}
             <button
               onClick={() => router.push('/map')}
-              className="inline-flex items-center gap-2 rounded-full bg-[#ffb241] px-6 py-2.5 text-xs sm:text-sm font-black text-[#011438] shadow-xl hover:bg-amber-300 hover:scale-105 transition-all duration-200"
+              className="inline-flex items-center gap-2 rounded-full bg-amber px-6 py-2.5 text-xs sm:text-sm font-black text-navy-950 shadow-xl hover:bg-amber-300 hover:scale-105 transition-all duration-200"
             >
               Interactive Map &rarr;
             </button>
@@ -243,7 +243,7 @@ export default function ContractorsPage() {
                     setPage(1);
                   }}
                   placeholder="Search contractor name or keyword..."
-                  className="w-full rounded-full border border-gray-200 bg-gray-50 py-3 pl-12 pr-4 text-sm font-semibold text-gray-900 placeholder:text-gray-400 focus:border-[#01367d] focus:bg-white focus:outline-none focus:ring-2 focus:ring-[#01367d]/20 transition-all"
+                  className="w-full rounded-full border border-gray-200 bg-gray-50 py-3 pl-12 pr-4 text-sm font-semibold text-gray-900 placeholder:text-gray-400 focus:border-navy focus:bg-white focus:outline-none focus:ring-2 focus:ring-navy/20 transition-all"
                 />
               </div>
 
@@ -252,7 +252,7 @@ export default function ContractorsPage() {
                 <select
                   value={sortBy}
                   onChange={(e) => setSortBy(e.target.value as 'totalValuePHP' | 'totalContracts' | 'overdueCount' | 'avgProgress')}
-                  className="rounded-full border border-gray-200 bg-white px-4 py-2 text-xs sm:text-sm font-extrabold text-[#01367d] focus:border-[#01367d] focus:ring-1 focus:ring-[#01367d] shadow-sm"
+                  className="rounded-full border border-gray-200 bg-white px-4 py-2 text-xs sm:text-sm font-extrabold text-navy focus:border-navy focus:ring-1 focus:ring-navy shadow-sm"
                 >
                   <option value="totalValuePHP">Total Value (₱)</option>
                   <option value="totalContracts">Award Count</option>
@@ -262,7 +262,7 @@ export default function ContractorsPage() {
 
                 <button
                   onClick={() => setSortOrder((o) => (o === 'desc' ? 'asc' : 'desc'))}
-                  className="rounded-full border border-gray-200 bg-gray-50 px-4 py-2 text-xs sm:text-sm font-bold text-[#01367d] hover:bg-[#01367d] hover:text-white transition shadow-sm"
+                  className="rounded-full border border-gray-200 bg-gray-50 px-4 py-2 text-xs sm:text-sm font-bold text-navy hover:bg-navy hover:text-white transition shadow-sm"
                 >
                   {sortOrder === 'desc' ? '↓ High to Low' : '↑ Low to High'}
                 </button>
@@ -272,7 +272,7 @@ export default function ContractorsPage() {
             {/* Contractor Leaderboard Stream */}
             <div className="space-y-4">
               <div className="flex items-center justify-between">
-                <h2 className="text-xl font-black text-[#01367d] tracking-tight">
+                <h2 className="text-xl font-black text-navy tracking-tight">
                   Contractor Leaderboard ({contractorsList.length} Entities)
                 </h2>
               </div>
@@ -295,9 +295,9 @@ export default function ContractorsPage() {
 
                     // Status Bar Accent Color
                     const accentBg = isHighRisk 
-                      ? 'bg-[#a80101]' 
+                      ? 'bg-signal' 
                       : isPending 
-                      ? 'bg-[#ffb241]' 
+                      ? 'bg-amber' 
                       : 'bg-blue-600';
 
                     return (
@@ -313,7 +313,7 @@ export default function ContractorsPage() {
                           terminatedCount: c.terminatedCount,
                         })}
                         className={`group relative overflow-hidden rounded-3xl bg-white p-5 sm:p-6 shadow-sm hover:shadow-xl hover:-translate-y-0.5 transition-all duration-300 border cursor-pointer ${
-                          isSelected ? 'border-[#01367d] ring-2 ring-[#01367d]/20 bg-blue-50/20 shadow-md' : 'border-gray-200/80 hover:border-[#01367d]/40'
+                          isSelected ? 'border-navy ring-2 ring-navy/20 bg-blue-50/20 shadow-md' : 'border-gray-200/80 hover:border-navy/40'
                         }`}
                       >
                         <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-5">
@@ -327,16 +327,16 @@ export default function ContractorsPage() {
                             <div className="bg-slate-50/90 border border-slate-100 rounded-2xl p-4 sm:w-48 text-left shadow-xs">
                               <div className="flex items-center gap-2 mb-1">
                                 {isTop3 ? (
-                                  <span className="inline-flex items-center justify-center rounded-full bg-gradient-to-r from-[#ffb241] to-amber-400 text-[#01367d] font-black text-xs px-3 py-0.5 shadow-xs">
+                                  <span className="inline-flex items-center justify-center rounded-full bg-gradient-to-r from-amber to-amber-400 text-navy font-black text-xs px-3 py-0.5 shadow-xs">
                                     Rank #{rank}
                                   </span>
                                 ) : (
-                                  <span className="inline-flex items-center justify-center rounded-full bg-[#01367d]/10 text-[#01367d] font-black text-xs px-3 py-0.5">
+                                  <span className="inline-flex items-center justify-center rounded-full bg-navy/10 text-navy font-black text-xs px-3 py-0.5">
                                     Rank #{rank}
                                   </span>
                                 )}
                               </div>
-                              <div className="text-xl sm:text-2xl font-black text-[#01367d] tracking-tight">
+                              <div className="text-xl sm:text-2xl font-black text-navy tracking-tight">
                                 {formatCurrency(c.totalValuePHP)}
                               </div>
                               <div className="text-xs font-bold text-gray-500 mt-0.5">
@@ -347,11 +347,11 @@ export default function ContractorsPage() {
 
                           {/* Col 2: Avatar & Contractor Entity Name */}
                           <div className="flex items-start sm:items-center gap-4 flex-1 min-w-0">
-                            <div className="h-14 w-14 shrink-0 rounded-2xl bg-gradient-to-br from-[#01367d] to-[#011438] text-white font-black flex items-center justify-center text-lg shadow-md border-2 border-white">
+                            <div className="h-14 w-14 shrink-0 rounded-2xl bg-gradient-to-br from-navy to-navy-950 text-white font-black flex items-center justify-center text-lg shadow-md border-2 border-white">
                               {c.name.substring(0, 2).toUpperCase()}
                             </div>
                             <div className="min-w-0 flex-1 space-y-1.5">
-                              <h3 className="text-base sm:text-lg lg:text-xl font-black text-gray-900 group-hover:text-[#01367d] transition line-clamp-2 leading-snug">
+                              <h3 className="text-base sm:text-lg lg:text-xl font-black text-gray-900 group-hover:text-navy transition line-clamp-2 leading-snug">
                                 {c.name}
                               </h3>
 
@@ -379,10 +379,10 @@ export default function ContractorsPage() {
                             {c.overdueCount > 0 ? (
                               <span className={`inline-flex items-center gap-2 rounded-full px-4 py-2 text-xs sm:text-sm font-black shadow-xs ${
                                 isHighRisk 
-                                  ? 'bg-red-50 text-[#a80101] border border-red-200/80' 
-                                  : 'bg-amber-50 text-[#b45309] border border-[#ffb241]/60'
+                                  ? 'bg-red-50 text-signal border border-red-200/80' 
+                                  : 'bg-amber-50 text-[#b45309] border border-amber/60'
                               }`}>
-                                <span className={`h-2.5 w-2.5 rounded-full animate-pulse ${isHighRisk ? 'bg-[#a80101]' : 'bg-[#ffb241]'}`} />
+                                <span className={`h-2.5 w-2.5 rounded-full animate-pulse ${isHighRisk ? 'bg-signal' : 'bg-amber'}`} />
                                 {c.overdueCount} Overdue
                               </span>
                             ) : (
@@ -398,7 +398,7 @@ export default function ContractorsPage() {
                                 e.stopPropagation();
                                 setActiveDrawerContractor({ name: c.name, id: c.id });
                               }}
-                              className="rounded-full bg-[#01367d] px-6 py-2.5 text-xs sm:text-sm font-black text-white shadow-md hover:bg-[#ffb241] hover:text-[#01367d] hover:scale-105 transition-all duration-200 whitespace-nowrap"
+                              className="rounded-full bg-navy px-6 py-2.5 text-xs sm:text-sm font-black text-white shadow-md hover:bg-amber hover:text-navy hover:scale-105 transition-all duration-200 whitespace-nowrap"
                             >
                               View Projects &rarr;
                             </button>
@@ -417,20 +417,20 @@ export default function ContractorsPage() {
                 {totalPages > 1 && (
                   <div className="flex items-center justify-between border-t border-gray-200 pt-6">
                     <p className="text-xs sm:text-sm text-gray-600 font-semibold">
-                      Page <span className="font-extrabold text-[#01367d]">{page}</span> of <span className="font-extrabold text-[#01367d]">{totalPages}</span>
+                      Page <span className="font-extrabold text-navy">{page}</span> of <span className="font-extrabold text-navy">{totalPages}</span>
                     </p>
                     <div className="flex items-center gap-2">
                       <button
                         disabled={page <= 1}
                         onClick={() => setPage((p) => Math.max(p - 1, 1))}
-                        className="rounded-full border border-gray-300 bg-white px-5 py-2 text-xs sm:text-sm font-bold text-[#01367d] hover:bg-gray-50 disabled:opacity-50 transition shadow-sm"
+                        className="rounded-full border border-gray-300 bg-white px-5 py-2 text-xs sm:text-sm font-bold text-navy hover:bg-gray-50 disabled:opacity-50 transition shadow-sm"
                       >
                         &larr; Previous
                       </button>
                       <button
                         disabled={page >= totalPages}
                         onClick={() => setPage((p) => Math.min(p + 1, totalPages))}
-                        className="rounded-full border border-gray-300 bg-white px-5 py-2 text-xs sm:text-sm font-bold text-[#01367d] hover:bg-gray-50 disabled:opacity-50 transition shadow-sm"
+                        className="rounded-full border border-gray-300 bg-white px-5 py-2 text-xs sm:text-sm font-bold text-navy hover:bg-gray-50 disabled:opacity-50 transition shadow-sm"
                       >
                         Next &rarr;
                       </button>
@@ -448,7 +448,7 @@ export default function ContractorsPage() {
               
               <div className="flex items-center justify-between border-b border-gray-100 pb-4">
                 <span className="text-xs font-black uppercase tracking-wider text-gray-400">National Registry Summary</span>
-                <span className="text-xs font-black text-[#01367d]">Overview</span>
+                <span className="text-xs font-black text-navy">Overview</span>
               </div>
 
               {/* 3 Metric Badges Row */}
@@ -463,14 +463,14 @@ export default function ContractorsPage() {
 
                 {/* Overdue Badge */}
                 <div className="p-3.5 rounded-2xl bg-amber-50 border border-amber-100 flex flex-col items-center">
-                  <div className="h-2 w-2 rounded-full bg-[#ffb241] mb-2" />
+                  <div className="h-2 w-2 rounded-full bg-amber mb-2" />
                   <span className="text-base sm:text-lg font-black text-amber-900">{summaryStats.overdue.toLocaleString()}</span>
                   <span className="text-xs font-bold text-amber-700 mt-0.5 uppercase tracking-wider text-[10px]">Overdue</span>
                 </div>
 
                 {/* Terminated Badge */}
                 <div className="p-3.5 rounded-2xl bg-red-50 border border-red-100 flex flex-col items-center">
-                  <div className="h-2 w-2 rounded-full bg-[#a80101] mb-2" />
+                  <div className="h-2 w-2 rounded-full bg-signal mb-2" />
                   <span className="text-base sm:text-lg font-black text-red-900">{summaryStats.terminated.toLocaleString()}</span>
                   <span className="text-xs font-bold text-red-700 mt-0.5 uppercase tracking-wider text-[10px]">Terminated</span>
                 </div>
@@ -480,16 +480,16 @@ export default function ContractorsPage() {
               {activeContractor ? (
                 <div className="pt-4 border-t border-gray-100 space-y-5">
                   <div className="text-center">
-                    <span className="text-xs font-black uppercase tracking-wider text-[#ffb241] bg-[#011438] px-4 py-1.5 rounded-full border border-[#01367d]">
+                    <span className="text-xs font-black uppercase tracking-wider text-amber bg-navy-950 px-4 py-1.5 rounded-full border border-navy">
                       Contractor Inspector
                     </span>
 
                     {/* Entity Avatar */}
-                    <div className="mx-auto mt-5 h-20 w-20 rounded-2xl bg-[#01367d] text-white font-black text-2xl flex items-center justify-center shadow-lg border-2 border-white">
+                    <div className="mx-auto mt-5 h-20 w-20 rounded-2xl bg-navy text-white font-black text-2xl flex items-center justify-center shadow-lg border-2 border-white">
                       {activeContractor.label.substring(0, 2).toUpperCase()}
                     </div>
 
-                    <h3 className="mt-4 text-base sm:text-lg font-black text-[#01367d] leading-snug">
+                    <h3 className="mt-4 text-base sm:text-lg font-black text-navy leading-snug">
                       {activeContractor.label}
                     </h3>
                     <p className="text-xs font-semibold text-gray-500 mt-1">
@@ -501,7 +501,7 @@ export default function ContractorsPage() {
                   <div className="space-y-3 pt-2 text-xs sm:text-sm font-medium">
                     <div className="flex justify-between items-center py-2 border-b border-gray-50">
                       <span className="text-gray-500 font-bold">Cumulative Award Value</span>
-                      <span className="font-black text-[#01367d] text-sm sm:text-base">{formatCurrency(activeContractor.totalValue)}</span>
+                      <span className="font-black text-navy text-sm sm:text-base">{formatCurrency(activeContractor.totalValue)}</span>
                     </div>
                     <div className="flex justify-between items-center py-2 border-b border-gray-50">
                       <span className="text-gray-500 font-bold">Total Award Contracts</span>
@@ -522,7 +522,7 @@ export default function ContractorsPage() {
                   {/* Full Projects Button */}
                   <button
                     onClick={() => setActiveDrawerContractor({ name: activeContractor.label, id: activeContractor.id })}
-                    className="w-full mt-4 rounded-full bg-[#01367d] py-3.5 text-center text-xs sm:text-sm font-black text-white shadow-xl hover:bg-[#ffb241] hover:text-[#01367d] hover:scale-105 transition-all duration-200"
+                    className="w-full mt-4 rounded-full bg-navy py-3.5 text-center text-xs sm:text-sm font-black text-white shadow-xl hover:bg-amber hover:text-navy hover:scale-105 transition-all duration-200"
                   >
                     View All Won Projects &rarr;
                   </button>
@@ -548,7 +548,7 @@ export default function ContractorsPage() {
         >
           {/* Backdrop overlay */}
           <div
-            className="fixed inset-0 bg-[#011438]/60 backdrop-blur-xs transition-opacity duration-300"
+            className="fixed inset-0 bg-navy-950/60 backdrop-blur-xs transition-opacity duration-300"
             onClick={() => setActiveDrawerContractor(null)}
             aria-hidden="true"
           />
@@ -557,10 +557,10 @@ export default function ContractorsPage() {
             <div className="w-full max-w-xl bg-white h-full shadow-2xl z-50 flex flex-col border-l border-gray-200 animate-in slide-in-from-right duration-300">
               
               {/* Drawer Header */}
-              <div className="bg-[#011438] text-white p-6 border-b border-[#01367d]/40 flex items-start justify-between gap-4 shrink-0">
+              <div className="bg-navy-950 text-white p-6 border-b border-navy/40 flex items-start justify-between gap-4 shrink-0">
                 <div className="space-y-1.5 flex-1 min-w-0">
-                  <div className="inline-flex items-center gap-2 rounded-full bg-white/10 px-3 py-1 text-[11px] font-black text-[#ffb241] border border-white/15">
-                    <span className="h-1.5 w-1.5 rounded-full bg-[#ffb241]" />
+                  <div className="inline-flex items-center gap-2 rounded-full bg-white/10 px-3 py-1 text-[11px] font-black text-amber border border-white/15">
+                    <span className="h-1.5 w-1.5 rounded-full bg-amber" />
                     WON PROJECTS DOSSIER
                   </div>
                   <h2 id="slide-over-title" className="text-xl sm:text-2xl font-black tracking-tight text-white line-clamp-2 leading-snug">
@@ -571,7 +571,7 @@ export default function ContractorsPage() {
                       <span>Loading won contracts...</span>
                     ) : (
                       <span className="inline-flex items-center gap-1.5">
-                        <span className="font-bold text-[#ffb241]">{drawerProjects.length}</span>
+                        <span className="font-bold text-amber">{drawerProjects.length}</span>
                         <span>Won Contract{drawerProjects.length === 1 ? '' : 's'}</span>
                       </span>
                     )}
@@ -581,7 +581,7 @@ export default function ContractorsPage() {
                 <button
                   type="button"
                   onClick={() => setActiveDrawerContractor(null)}
-                  className="rounded-full p-2 bg-white/10 hover:bg-white/20 text-white transition-colors shrink-0 focus:outline-none focus:ring-2 focus:ring-[#ffb241]"
+                  className="rounded-full p-2 bg-white/10 hover:bg-white/20 text-white transition-colors shrink-0 focus:outline-none focus:ring-2 focus:ring-amber"
                   aria-label="Close drawer"
                 >
                   <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
@@ -619,11 +619,11 @@ export default function ContractorsPage() {
                       <div
                         key={project.id}
                         onClick={() => router.push(`/projects/${encodeURIComponent(project.id)}`)}
-                        className="group cursor-pointer rounded-2xl bg-white p-5 border border-gray-200/90 shadow-xs hover:border-[#01367d] hover:shadow-lg transition-all duration-200 flex flex-col gap-3"
+                        className="group cursor-pointer rounded-2xl bg-white p-5 border border-gray-200/90 shadow-xs hover:border-navy hover:shadow-lg transition-all duration-200 flex flex-col gap-3"
                       >
                         {/* Project Name and ID */}
                         <div className="space-y-1">
-                          <h3 className="font-bold text-sm text-[#01367d] group-hover:text-blue-700 transition leading-snug">
+                          <h3 className="font-bold text-sm text-navy group-hover:text-blue-700 transition leading-snug">
                             {project.name}
                           </h3>
                           <div className="font-mono text-xs text-gray-500">
@@ -643,7 +643,7 @@ export default function ContractorsPage() {
                         {/* Approved Budget */}
                         <div className="flex items-center justify-between text-xs pt-1 border-t border-gray-100">
                           <span className="text-gray-500 font-semibold">Approved Budget</span>
-                          <span className="font-black text-[#011438] text-sm">
+                          <span className="font-black text-navy-950 text-sm">
                             {formatCurrency(project.budgetPHP ?? project.budget ?? 0)}
                           </span>
                         </div>
@@ -652,7 +652,7 @@ export default function ContractorsPage() {
                         <div className="space-y-1">
                           <div className="flex items-center justify-between text-xs font-bold">
                             <span className="text-gray-500">Physical Progress</span>
-                            <span className="text-[#01367d] font-black">{progressPct.toFixed(1)}%</span>
+                            <span className="text-navy font-black">{progressPct.toFixed(1)}%</span>
                           </div>
                           <div className="h-2 w-full rounded-full bg-gray-100 overflow-hidden">
                             <div
@@ -666,7 +666,7 @@ export default function ContractorsPage() {
                         </div>
 
                         {/* Direct Dossier Routing CTA */}
-                        <div className="flex items-center justify-end pt-1 text-xs font-bold text-[#01367d] group-hover:text-[#ffb241] transition-colors">
+                        <div className="flex items-center justify-end pt-1 text-xs font-bold text-navy group-hover:text-amber-ink transition-colors">
                           View Project Dossier &rarr;
                         </div>
                       </div>
@@ -690,36 +690,7 @@ export default function ContractorsPage() {
           </div>
         </div>
       )}
-
-      {/* Full-Width Footer with #eeeeee Background & MAPATUNAI.png Asset */}
-      <footer className="w-full mt-16 py-16 px-6 md:px-16 bg-[#eeeeee] text-[#01367d] border-t border-[#01367d]/15 space-y-8 text-center shadow-inner">
-        <div className="max-w-3xl mx-auto space-y-4">
-          <div className="flex items-center justify-center">
-            <Image
-              src="/MAPATUNAI.png"
-              alt="MAPATUNAI Logo"
-              width={160}
-              height={45}
-              className="h-10 w-auto object-contain"
-            />
-          </div>
-          <p className="text-sm text-[#01367d]/80 leading-relaxed font-medium">
-            MapaTunAI was engineered by <strong className="text-[#01367d] font-black">UA HOW 2</strong> as a 100% open, public-interest civic technology tool for Philippine governance. Our goal is to provide every Filipino taxpayer with satellite proof and ground-truth data to hold public works accountable.
-          </p>
-        </div>
-
-        <div className="flex flex-wrap items-center justify-center gap-6 text-sm font-bold text-[#01367d]">
-          <a href="/map" className="hover:text-[#ffb241] transition-colors">National Map</a>
-          <span>•</span>
-          <a href="/contractors" className="hover:text-[#ffb241] transition-colors">Contractor Registry</a>
-          <span>•</span>
-          <a href="/nearby" className="hover:text-[#ffb241] transition-colors">Near Me Scanner</a>
-        </div>
-
-        <p className="text-xs text-[#01367d]/60 font-semibold">
-          &copy; {new Date().getFullYear()} MapaTunAI by UA HOW 2. All public contract metrics sourced from official DPWH disclosures &amp; verified citizen ground reports.
-        </p>
-      </footer>
+      <SiteFooter className="mt-16" />
     </div>
   );
 }
