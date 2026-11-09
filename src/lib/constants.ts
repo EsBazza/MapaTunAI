@@ -24,6 +24,15 @@ export const FLAG_COLORS: Record<string, string> = {
   'Payment Pending': 'bg-slate-100 text-slate-600 border-slate-300',
 };
 
+/** Plain-language labels for flag keys (keys stay stable for colours/logic) */
+export const FLAG_LABELS: Record<string, string> = {
+  'Stalled': 'No recent progress',
+  'Never Started': "Hasn't started",
+  'Overdue': 'Past deadline',
+  'Overpaid': 'Paid but little work done',
+  'Payment Pending': 'Payment not yet released',
+};
+
 /** Project categories from real DPWH data */
 export const PROJECT_CATEGORIES = [
   'All',

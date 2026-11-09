@@ -47,7 +47,7 @@ export async function GET(
         const scraped = await fetchLiveContractFromScraper(contractId);
         if (scraped && scraped.contractId) {
           const syncResult = await syncScrapedContractToDb(scraped);
-          doc = syncResult.contractDoc;
+          if (syncResult) doc = syncResult.contractDoc;
           targetUrl = getRealDocUrl(doc);
         }
       } catch (scraperErr) {

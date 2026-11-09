@@ -2,6 +2,7 @@ import { NextRequest } from 'next/server';
 import { prisma } from '@/lib/prisma';
 import { env } from '@/lib/env';
 import { computeAnomalyFlags } from '@/lib/anomaly-flags';
+import { normalizeStatus } from '@/lib/status';
 import { buildProvinceLookup } from '@/lib/province-normalizer';
 import { cleanContractorName, parseContractors } from '@/lib/format';
 import { DPWH_API_BASE, HF_DATASET_API, HF_DATASET_NAME, SYNC_DELAY_MS, SYNC_BATCH_SIZE } from '@/lib/constants';
@@ -151,7 +152,7 @@ async function upsertProjects(projects: DPWHProject[], source: string): Promise<
 
       const flags = computeAnomalyFlags(
         {
-          status: p.status,
+          status: normalizeStatus(p.status),
           progress: p.progress,
           startDate,
           completionDate,
@@ -175,7 +176,7 @@ async function upsertProjects(projects: DPWHProject[], source: string): Promise<
             progress: p.progress,
             startDate,
             completionDate,
-            status: p.status,
+            status: normalizeStatus(p.status),
             category: p.category,
             contractorRaw: p.contractor,
             sourceOfFunds: p.sourceOfFunds,
@@ -197,7 +198,7 @@ async function upsertProjects(projects: DPWHProject[], source: string): Promise<
             progress: p.progress,
             startDate,
             completionDate,
-            status: p.status,
+            status: normalizeStatus(p.status),
             category: p.category,
             contractorRaw: p.contractor,
             sourceOfFunds: p.sourceOfFunds,
@@ -223,7 +224,7 @@ async function upsertProjects(projects: DPWHProject[], source: string): Promise<
         existing.totalValue += p.budget;
         existing.totalProgress += p.progress;
         if (flags.flagOverdue) existing.overdueCount++;
-        if (p.status === 'Terminated') existing.terminatedCount++;
+        if (normalizeStatus(p.status) === 'Terminated') existing.terminatedCount++;
         contractorStats.set(cleaned, existing);
       }
     }

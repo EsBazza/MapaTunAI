@@ -1,136 +1,42 @@
 import { NextRequest } from 'next/server';
-import fs from 'fs';
-import path from 'path';
+import type { Prisma } from '@prisma/client';
 import { prisma } from '@/lib/prisma';
-import { resolveProvinceAndRegion } from '@/lib/geo-spatial';
+import { displayLocation } from '@/lib/location';
 import { cleanProjectTitle } from '@/lib/title-cleaner';
-import { computeRiskScore, computeAnomalyFlags } from '@/lib/anomaly-flags';
+import { computeRiskScore } from '@/lib/anomaly-flags';
 import { fetchLiveContractFromScraper, syncScrapedContractToDb } from '@/lib/dpwh-scraper';
+import { jsonError } from '@/lib/api';
+import { PUBLIC_REVIEW_SELECT } from '@/lib/review-select';
 
-async function fallbackIngestFromGeo(id: string) {
-  try {
-    const filePath = path.join(process.cwd(), 'public', 'geo', 'all_projects.json');
-    if (!fs.existsSync(filePath)) return null;
+const PROJECT_INCLUDE = {
+  province: { include: { region: true } },
+  comments: {
+    where: { phoneVerified: true },
+    orderBy: { createdAt: 'desc' },
+    select: {
+      id: true,
+      text: true,
+      severity: true,
+      rationale: true,
+      corroborationCount: true,
+      photoUrl: true,
+      createdAt: true,
+    },
+  },
+  reviews: {
+    orderBy: { createdAt: 'desc' },
+    select: PUBLIC_REVIEW_SELECT,
+  },
+  contractDocument: { include: { engineerSignature: true } },
+} satisfies Prisma.ProjectInclude;
 
-    const content = fs.readFileSync(filePath, 'utf8');
-    const needle = `"i":"${id}"`;
-    const idx = content.indexOf(needle);
-    if (idx === -1) return null;
+function findProject(id: string) {
+  return prisma.project.findUnique({ where: { id }, include: PROJECT_INCLUDE });
+}
 
-    const start = content.lastIndexOf('{"type":"Feature"', idx);
-    const end = content.indexOf('}}', idx) + 2;
-    if (start === -1 || end <= start) return null;
-
-    const snippet = content.substring(start, end);
-    const feature = JSON.parse(snippet);
-
-    const coords = feature.geometry?.coordinates || [120.9842, 14.5995];
-    const lng = coords[0];
-    const lat = coords[1];
-    const props = feature.properties || {};
-
-    const spatial = resolveProvinceAndRegion(lng, lat);
-    let provinceId: string | null = null;
-    if (spatial?.province) {
-      const prov = await prisma.province.findFirst({
-        where: { name: { contains: spatial.province, mode: 'insensitive' } },
-      });
-      if (prov) provinceId = prov.id;
-    }
-
-    if (!provinceId) {
-      const defaultProv = await prisma.province.findFirst();
-      provinceId = defaultProv?.id || '';
-    }
-
-    const statusMap: Record<number, string> = {
-      0: 'Completed',
-      1: 'Ongoing',
-      2: 'Not Yet Started',
-      3: 'Suspended',
-    };
-    const status = statusMap[props.s] || 'Ongoing';
-    const progress = Number(props.g) || 0;
-    const budget = (Number(props.b) || 0) * 1000;
-    const category = props.c || 'Flood Control and Drainage';
-    const name = props.n || 'DPWH Infrastructure Project';
-
-    const now = new Date();
-    const anomaly = computeAnomalyFlags(
-      {
-        status,
-        progress,
-        startDate: now,
-        completionDate: null,
-        budgetPHP: budget,
-        amountPaid: 0,
-      },
-      null,
-      0
-    );
-
-    const newProject = await prisma.project.upsert({
-      where: { id },
-      update: {
-        name,
-        gpsLat: lat,
-        gpsLng: lng,
-        budgetPHP: budget,
-        progress,
-        status,
-        category,
-        provinceId,
-      },
-      create: {
-        id,
-        name,
-        gpsLat: lat,
-        gpsLng: lng,
-        budgetPHP: budget,
-        amountPaid: 0,
-        progress,
-        startDate: now,
-        status,
-        category,
-        contractorRaw: 'DPWH Registered Contractor',
-        provinceId,
-        flagStalled: anomaly.flagStalled,
-        flagNeverStarted: anomaly.flagNeverStarted,
-        flagOverdue: anomaly.flagOverdue,
-        flagPaymentPending: anomaly.flagPaymentPending,
-        flagOverpaid: anomaly.flagOverpaid,
-        syncSource: 'dpwh_national_archive',
-      },
-      include: {
-        province: {
-          include: { region: true },
-        },
-        comments: {
-          where: { phoneVerified: true },
-          orderBy: { createdAt: 'desc' },
-        },
-        reviews: {
-          orderBy: { createdAt: 'desc' },
-        },
-        contractDocument: {
-          include: {
-            engineerSignature: true,
-          },
-        },
-      },
-    });
-
-    if (!newProject.contractDocument) {
-      (newProject as any).contractDocument = {
-        sourcePdfUrl: `https://www.dpwh.gov.ph/dpwh/business/procurement/civil-works/contract/${encodeURIComponent(id)}`,
-      };
-    }
-
-    return newProject;
-  } catch (err) {
-    console.error('Error during fallback project ingestion:', err);
-    return null;
-  }
+/** True for a document URL that points at an actual file rather than a DPWH landing page. */
+function isRealDocUrl(url: string | null | undefined): url is string {
+  return !!url && url.startsWith('http') && !url.includes('dpwh.gov.ph/dpwh/business');
 }
 
 export async function GET(
@@ -138,134 +44,66 @@ export async function GET(
   { params }: { params: Promise<{ id: string }> }
 ) {
   try {
-    const { id } = await params;
+    const { id: rawId } = await params;
+    const id = decodeURIComponent(rawId).trim();
+    if (!id) return jsonError(400, 'Project id is required.');
 
-    let project = await prisma.project.findUnique({
-      where: { id },
-      include: {
-        province: {
-          include: { region: true },
-        },
-        comments: {
-          where: { phoneVerified: true },
-          orderBy: { createdAt: 'desc' },
-        },
-        reviews: {
-          orderBy: { createdAt: 'desc' },
-        },
-        contractDocument: {
-          include: {
-            engineerSignature: true,
-          },
-        },
-      },
-    });
+    let project = await findProject(id);
 
-    const hasRealDoc =
-      project?.contractDocument?.sourcePdfUrl &&
-      !project.contractDocument.sourcePdfUrl.includes('transparency.dpwh.gov.ph') &&
-      (project.contractDocument.contractAgreementUrl ||
-        project.contractDocument.noticeToProceedUrl ||
-        project.contractDocument.noticeOfAwardUrl ||
-        project.contractDocument.advertisementUrl ||
-        project.contractDocument.sourcePdfUrl.endsWith('.pdf'));
-
-    // If project is missing or only has legacy placeholder URLs, run live DPWH scraper
-    if (!project || !hasRealDoc) {
-      const scraped = await fetchLiveContractFromScraper(id);
-      if (scraped && scraped.contractId) {
-        await syncScrapedContractToDb(scraped);
-        project = await prisma.project.findUnique({
-          where: { id },
-          include: {
-            province: {
-              include: { region: true },
-            },
-            comments: {
-              where: { phoneVerified: true },
-              orderBy: { createdAt: 'desc' },
-            },
-            reviews: {
-              orderBy: { createdAt: 'desc' },
-            },
-            contractDocument: {
-              include: {
-                engineerSignature: true,
-              },
-            },
-          },
-        });
+    // Only reach out to the live DPWH scraper when we have no record at all.
+    // (It is slow and writes to the DB, so it must not run on every page view.)
+    if (!project) {
+      try {
+        const scraped = await fetchLiveContractFromScraper(id);
+        if (scraped?.contractId) {
+          const synced = await syncScrapedContractToDb(scraped);
+          if (synced) project = await findProject(id);
+        }
+      } catch (err) {
+        console.warn(`[projects/${id}] live DPWH lookup failed:`, err);
       }
     }
 
     if (!project) {
-      project = await fallbackIngestFromGeo(id);
+      return jsonError(404, 'We could not find this project in the DPWH records.');
     }
 
-    if (!project) {
-      return Response.json(
-        { error: 'Project not found' },
-        { status: 404 }
-      );
-    }
+    // The DB province can be wrong for older imports; prefer the one the GPS point falls in.
+    const location = displayLocation(project);
+    const resolvedProvince = location.province;
+    const resolvedRegion = location.region || project.province?.region?.name;
 
-    // SPATIAL OVERRIDE: If the project's GPS coordinates resolve to a real province/region,
-    // override the inaccurate DB province relation (e.g. Candaba in Pampanga vs NCR).
-    let resolvedProvince = project.province?.name;
-    let resolvedRegion = project.province?.region?.name;
-
-    if (project.gpsLng && project.gpsLat) {
-      const spatial = resolveProvinceAndRegion(project.gpsLng, project.gpsLat);
-      if (spatial) {
-        resolvedProvince = spatial.province;
-        resolvedRegion = spatial.region;
-      }
-    }
-
-    const cleanedName = cleanProjectTitle(project.name);
     const riskScore = computeRiskScore(project);
+    const doc = project.contractDocument;
+    const bestDocUrl = doc
+      ? [doc.contractAgreementUrl, doc.noticeToProceedUrl, doc.noticeOfAwardUrl, doc.advertisementUrl, doc.sourcePdfUrl].find(
+          isRealDocUrl
+        ) ?? ''
+      : '';
 
     const enrichedProject = {
       ...project,
-      name: cleanedName,
+      name: cleanProjectTitle(project.name),
       rawName: project.name,
       riskScore,
+      location,
       province: {
         id: project.province?.id || '',
-        name: resolvedProvince || project.province?.name || '',
+        name: resolvedProvince || '',
         region: {
           id: project.province?.region?.id || '',
-          name: resolvedRegion || project.province?.region?.name || '',
+          name: resolvedRegion || '',
         },
       },
-      contractDocument: project.contractDocument
-        ? {
-            ...project.contractDocument,
-            sourcePdfUrl:
-              project.contractDocument.sourcePdfUrl &&
-              !project.contractDocument.sourcePdfUrl.includes('dpwh.gov.ph')
-                ? project.contractDocument.sourcePdfUrl
-                : project.contractDocument.contractAgreementUrl ||
-                  project.contractDocument.noticeToProceedUrl ||
-                  project.contractDocument.noticeOfAwardUrl ||
-                  '',
-          }
-        : null,
+      contractDocument: doc ? { ...doc, sourcePdfUrl: bestDocUrl } : null,
     };
 
     return Response.json(
       { project: enrichedProject, riskScore },
-      {
-        headers: {
-          'Cache-Control': 'public, max-age=60, stale-while-revalidate=300',
-        },
-      }
+      { headers: { 'Cache-Control': 'public, max-age=60, stale-while-revalidate=300' } }
     );
   } catch (error) {
     console.error('Error fetching project:', error);
-    return Response.json(
-      { error: 'Failed to fetch project' },
-      { status: 500 }
-    );
+    return jsonError(500, 'Something went wrong while loading this project. Please try again.');
   }
 }

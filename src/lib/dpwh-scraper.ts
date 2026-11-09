@@ -1,8 +1,8 @@
 import { execFile } from 'child_process';
 import path from 'path';
 import { prisma } from './prisma';
-import { computeAnomalyFlags, computeRiskScore } from './anomaly-flags';
-import { cleanProjectTitle } from './title-cleaner';
+import { computeAnomalyFlags } from './anomaly-flags';
+import { normalizeStatus } from './status';
 import { resolveProvinceAndRegion } from './geo-spatial';
 
 export interface ScrapedContractData {
@@ -79,7 +79,7 @@ export async function fetchLiveContractFromScraper(contractId: string): Promise<
       'python',
       [scriptPath, contractId.trim()],
       { timeout: 20000, maxBuffer: 10 * 1024 * 1024 },
-      (error, stdout, stderr) => {
+      (error, stdout) => {
         if (error) {
           console.warn(`[DPWH Scraper] Execution failed for ${contractId}:`, error.message);
           return resolve(null);
@@ -104,44 +104,75 @@ export async function fetchLiveContractFromScraper(contractId: string): Promise<
 /**
  * Ingests or synchronizes a scraped contract and its official documents into the database
  */
+function parseDate(value?: string | null): Date | null {
+  if (!value) return null;
+  const d = new Date(value);
+  return Number.isNaN(d.getTime()) ? null : d;
+}
+
+/**
+ * Ingests or synchronizes a scraped contract and its official documents into the database.
+ * Returns null (and writes nothing) when the record lacks the data needed to place it
+ * honestly: GPS coordinates, a resolvable province, or (for new records) a start date.
+ */
 export async function syncScrapedContractToDb(data: ScrapedContractData) {
   const contractId = data.contractId;
   const now = new Date();
 
-  const lat = data.latitude || data.location?.coordinates?.latitude || 14.5995;
-  const lng = data.longitude || data.location?.coordinates?.longitude || 120.9842;
+  const lat = Number(data.latitude ?? data.location?.coordinates?.latitude);
+  const lng = Number(data.longitude ?? data.location?.coordinates?.longitude);
+  if (!Number.isFinite(lat) || !Number.isFinite(lng) || (lat === 0 && lng === 0)) {
+    console.warn(`[DPWH Scraper] ${contractId} has no usable coordinates; skipping ingest.`);
+    return null;
+  }
+
   const budget = Number(data.budget) || 0;
   const amountPaid = Number(data.amountPaid) || 0;
   const progress = Number(data.progress) || 0;
+  const status = normalizeStatus(data.status);
 
-  const startDate = data.startDate ? new Date(data.startDate) : now;
-  const completionDate = data.completionDate ? new Date(data.completionDate) : null;
+  const startDate =
+    parseDate(data.startDate) ?? parseDate(data.procurement?.dateOfAward) ?? null;
+  const completionDate = parseDate(data.completionDate);
 
-  // Resolve province / region
+  // Resolve province / region; never fall back to an arbitrary province.
   const spatial = resolveProvinceAndRegion(lng, lat);
-  let province = await prisma.province.findFirst({
-    where: {
-      name: {
-        contains: spatial?.province || data.location?.province?.replace(/DEO/g, '').trim() || '',
-        mode: 'insensitive',
-      },
-    },
-  });
+  const provinceName = (
+    spatial?.province ||
+    data.location?.province?.replace(/DEO/g, '').trim() ||
+    ''
+  ).trim();
+  const province = provinceName
+    ? await prisma.province.findFirst({
+        where: { name: { contains: provinceName, mode: 'insensitive' } },
+      })
+    : null;
 
   if (!province) {
-    province = await prisma.province.findFirst();
+    console.warn(`[DPWH Scraper] Could not resolve a province for ${contractId}; skipping ingest.`);
+    return null;
   }
+  const provinceId = province.id;
 
-  const provinceId = province?.id || '';
+  const existing = await prisma.project.findUnique({
+    where: { id: contractId },
+    select: { startDate: true, lastActivityAt: true },
+  });
+  if (!existing && !startDate) {
+    console.warn(`[DPWH Scraper] ${contractId} has no start date; skipping ingest.`);
+    return null;
+  }
+  const effectiveStart = startDate ?? existing!.startDate;
 
   const anomaly = computeAnomalyFlags(
     {
       progress,
       budgetPHP: budget,
       amountPaid,
-      startDate,
+      startDate: effectiveStart,
       completionDate,
-      status: data.status,
+      status,
+      lastActivityAt: parseDate(data.imageSummary?.latestImageDate) ?? existing?.lastActivityAt ?? null,
     },
     null,
     0
@@ -169,9 +200,9 @@ export async function syncScrapedContractToDb(data: ScrapedContractData) {
       budgetPHP: budget,
       amountPaid,
       progress,
-      startDate,
+      startDate: effectiveStart,
       completionDate,
-      status: data.status || 'Completed',
+      status,
       category: data.category || 'Roads',
       contractorRaw: data.contractor || 'DPWH Registered Contractor',
       flagStalled: anomaly.flagStalled,
@@ -190,9 +221,9 @@ export async function syncScrapedContractToDb(data: ScrapedContractData) {
       budgetPHP: budget,
       amountPaid,
       progress,
-      startDate,
+      startDate: effectiveStart,
       completionDate,
-      status: data.status || 'Completed',
+      status,
       category: data.category || 'Roads',
       contractorRaw: data.contractor || 'DPWH Registered Contractor',
       flagStalled: anomaly.flagStalled,

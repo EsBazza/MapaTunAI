@@ -2,6 +2,11 @@ import { NextRequest } from 'next/server';
 import crypto from 'crypto';
 import { prisma } from '@/lib/prisma';
 import { isWithinReviewRadius, MAX_REVIEW_RADIUS_KM } from '@/lib/geo';
+import { jsonError, readJson } from '@/lib/api';
+import { PUBLIC_REVIEW_SELECT } from '@/lib/review-select';
+import { DEMO_PHONE_NUMBER } from '@/lib/constants';
+
+const MAX_COMMENT_LENGTH = 2000;
 
 export async function GET(request: NextRequest) {
   try {
@@ -16,6 +21,7 @@ export async function GET(request: NextRequest) {
       where: { projectId },
       orderBy: { createdAt: 'desc' },
       take: 50,
+      select: PUBLIC_REVIEW_SELECT,
     });
 
     const total = reviews.length;
@@ -44,7 +50,9 @@ export async function GET(request: NextRequest) {
 
 export async function POST(request: NextRequest) {
   try {
-    const body = await request.json();
+    const parsed = await readJson<Record<string, unknown>>(request);
+    if (!parsed.ok) return parsed.response;
+    const body = parsed.data;
     const {
       projectId,
       rating,
@@ -59,11 +67,11 @@ export async function POST(request: NextRequest) {
       userLng,
     } = body;
 
-    if (!projectId || rating === undefined || !comment) {
-      return Response.json(
-        { error: 'Missing required fields (projectId, rating, comment)' },
-        { status: 400 }
-      );
+    if (typeof projectId !== 'string' || !projectId || rating === undefined || typeof comment !== 'string' || !comment.trim()) {
+      return jsonError(400, 'Please give a rating and write a short comment.');
+    }
+    if (comment.length > MAX_COMMENT_LENGTH) {
+      return jsonError(400, `Your comment is too long (max ${MAX_COMMENT_LENGTH} characters).`);
     }
 
     // Every citizen report must carry ground-photo evidence.
@@ -74,6 +82,9 @@ export async function POST(request: NextRequest) {
       );
     }
 
+    if (!Number.isFinite(Number(rating))) {
+      return jsonError(400, 'Rating must be a number from 1 to 5.');
+    }
     const numericRating = Math.max(1, Math.min(5, Number(rating)));
 
     // 1. Fetch Project Details for Location Verification
@@ -150,10 +161,11 @@ export async function POST(request: NextRequest) {
       }
 
       if (otp && typeof otp === 'string' && otp.trim()) {
+        // Demo bypass: only for the dedicated demo number, never in production.
         const isDemo =
           process.env.DEMO_OTP_BYPASS === 'true' &&
           process.env.NODE_ENV !== 'production' &&
-          (trimmedPhone === '+639000000000' || otp === '123456');
+          trimmedPhone === DEMO_PHONE_NUMBER;
 
         if (isDemo) {
           phoneVerified = true;
@@ -175,6 +187,8 @@ export async function POST(request: NextRequest) {
               data: { used: true },
             });
             phoneVerified = true;
+          } else {
+            return jsonError(400, 'That verification code is wrong or has expired. Please request a new one.');
           }
         }
       }
@@ -189,14 +203,15 @@ export async function POST(request: NextRequest) {
 
     // 5. Create Review Record
     const review = await prisma.review.create({
+      select: PUBLIC_REVIEW_SELECT,
       data: {
         projectId,
         rating: numericRating,
-        progressRating: progressRating !== undefined ? Number(progressRating) : null,
-        qualityRating: qualityRating !== undefined ? Number(qualityRating) : null,
+        progressRating: Number.isFinite(Number(progressRating)) && progressRating !== null && progressRating !== undefined ? Math.max(0, Math.min(100, Number(progressRating))) : null,
+        qualityRating: Number.isFinite(Number(qualityRating)) && qualityRating !== null && qualityRating !== undefined ? Math.max(1, Math.min(5, Number(qualityRating))) : null,
         workersActive: typeof workersActive === 'boolean' ? workersActive : null,
-        comment,
-        photoUrl: photoUrl || null,
+        comment: comment.trim(),
+        photoUrl: photoUrl.trim(),
         phoneHash,
         phoneVerified,
         userLat: parsedUserLat,

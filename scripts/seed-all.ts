@@ -21,6 +21,7 @@ import bcrypt from 'bcryptjs';
 import { prisma } from '../src/lib/prisma';
 import { buildProvinceLookup } from '../src/lib/province-normalizer';
 import { computeAnomalyFlags } from '../src/lib/anomaly-flags';
+import { normalizeStatus } from '../src/lib/status';
 import { cleanContractorName, parseContractors } from '../src/lib/format';
 
 // Attempt to load environment variables from .env or .env.local if present
@@ -526,7 +527,7 @@ async function seedProjectsAndContractors(targetCount: number): Promise<{ projec
     let completionDate = raw.completionDate ? new Date(raw.completionDate) : null;
     if (completionDate && isNaN(completionDate.getTime())) completionDate = null;
 
-    const status = raw.status || (progress === 100 ? 'Completed' : 'On-Going');
+    const status = normalizeStatus(raw.status || (progress === 100 ? 'Completed' : 'On-Going'));
     const category = raw.category || 'Roads';
     const contractorRaw = raw.contractor || 'DPWH Direct Management';
     const description = raw.description || `DPWH Infrastructure Contract ${raw.contractId}`;

@@ -2,6 +2,7 @@ import { NextRequest } from 'next/server';
 import { prisma } from '@/lib/prisma';
 import { env } from '@/lib/env';
 import { computeAnomalyFlags } from '@/lib/anomaly-flags';
+import { normalizeStatus } from '@/lib/status';
 import { buildProvinceLookup } from '@/lib/province-normalizer';
 import { cleanContractorName, parseContractors } from '@/lib/format';
 import { HF_DATASET_API, HF_DATASET_NAME, SYNC_DELAY_MS } from '@/lib/constants';
@@ -106,7 +107,7 @@ export async function POST(request: NextRequest) {
 
         const flags = computeAnomalyFlags(
           {
-            status: p.status,
+            status: normalizeStatus(p.status),
             progress: p.progress,
             startDate,
             completionDate,
@@ -130,7 +131,7 @@ export async function POST(request: NextRequest) {
               progress: p.progress,
               startDate,
               completionDate,
-              status: p.status,
+              status: normalizeStatus(p.status),
               category: p.category,
               contractorRaw: p.contractor,
               sourceOfFunds: p.sourceOfFunds,
@@ -152,7 +153,7 @@ export async function POST(request: NextRequest) {
               progress: p.progress,
               startDate,
               completionDate,
-              status: p.status,
+              status: normalizeStatus(p.status),
               category: p.category,
               contractorRaw: p.contractor,
               sourceOfFunds: p.sourceOfFunds,
@@ -175,7 +176,7 @@ export async function POST(request: NextRequest) {
             existing.totalValue += p.budget;
             existing.totalProgress += p.progress;
             if (flags.flagOverdue) existing.overdueCount++;
-            if (p.status === 'Terminated') existing.terminatedCount++;
+            if (normalizeStatus(p.status) === 'Terminated') existing.terminatedCount++;
             contractorStats.set(cleaned, existing);
           }
         } catch (err) {

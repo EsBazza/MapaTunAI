@@ -47,3 +47,6 @@ public/geo/2023/municities/
 
 # datasets
 *.parquet
+
+# local agent workspace
+.superpowers/

@@ -1,4 +1,5 @@
 import type { Project } from '@prisma/client';
+import { normalizeStatus } from './status';
 
 export interface AnomalyFlags {
   flagStalled: boolean;
@@ -17,18 +18,27 @@ const STALLED_DAYS = 180;
  * - Informational flags (shown on detail page only): paymentPending
  */
 export function computeAnomalyFlags(
-  project: Pick<Project, 'status' | 'progress' | 'startDate' | 'completionDate' | 'amountPaid' | 'budgetPHP'>,
+  project: Pick<Project, 'status' | 'progress' | 'startDate' | 'completionDate' | 'amountPaid' | 'budgetPHP'> & {
+    lastActivityAt?: Date | string | null;
+  },
   latestUpdate: { createdAt: Date } | null,
   commentCount: number
 ): AnomalyFlags {
   const now = new Date();
+  const status = normalizeStatus(project.status);
 
-  // flagStalled: On-Going, no agency update in 180+ days, progress unchanged
-  const daysSinceUpdate = latestUpdate
-    ? (now.getTime() - new Date(latestUpdate.createdAt).getTime()) / (1000 * 60 * 60 * 24)
-    : Infinity;
+  // flagStalled: On-Going and no recorded activity in 180+ days.
+  // Uses the agency update record, falling back to lastActivityAt. With no activity
+  // signal at all we cannot tell if work stopped, so the project is NOT flagged
+  // (previously every ongoing project was flagged because the update was always null).
+  const referenceRaw = latestUpdate?.createdAt ?? project.lastActivityAt ?? null;
+  const referenceTime = referenceRaw ? new Date(referenceRaw).getTime() : NaN;
+  const daysSinceUpdate = Number.isFinite(referenceTime)
+    ? (now.getTime() - referenceTime) / (1000 * 60 * 60 * 24)
+    : 0;
   const flagStalled =
-    project.status === 'On-Going' &&
+    status === 'On-Going' &&
+    project.progress < 100 &&
     daysSinceUpdate >= STALLED_DAYS;
 
   // flagNeverStarted: start date passed, progress = 0, no comments
@@ -41,7 +51,8 @@ export function computeAnomalyFlags(
   const flagOverdue =
     project.completionDate !== null &&
     new Date(project.completionDate) < now &&
-    project.status !== 'Completed';
+    status !== 'Completed' &&
+    status !== 'Terminated';
 
   // flagOverpaid: progress < 30, amountPaid > 0, amountPaid > 80% of budget
   const flagOverpaid =
