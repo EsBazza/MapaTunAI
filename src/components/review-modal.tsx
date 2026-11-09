@@ -169,6 +169,11 @@ export default function ReviewModal({
       return;
     }
 
+    if (!photoUrl.trim()) {
+      setErrorMsg('A ground photo is required. Please attach a photo of the project site.');
+      return;
+    }
+
     setIsSubmitting(true);
     try {
       const res = await fetch('/api/reviews', {
@@ -181,7 +186,7 @@ export default function ReviewModal({
           qualityRating,
           workersActive,
           comment,
-          photoUrl: photoUrl.trim() || undefined,
+          photoUrl: photoUrl.trim(),
           userLat,
           userLng,
         }),
@@ -384,10 +389,13 @@ export default function ReviewModal({
             />
           </div>
 
-          {/* Ground Photo Image Upload (Optional) */}
+          {/* Ground Photo Image Upload (required) */}
           <div className="space-y-1.5">
             <div className="flex items-center justify-between">
-              <label className="font-bold text-gray-700">Ground Photo Proof (Optional):</label>
+              <label className="font-bold text-gray-700">
+                Ground Photo Proof <span className="text-red-600" aria-hidden="true">*</span>
+                <span className="sr-only">(required)</span>
+              </label>
               {photoUrl && (
                 <span className="text-[10px] text-emerald-600 font-bold bg-emerald-50 border border-emerald-200 px-2 py-0.5 rounded-full">
                   ✓ Photo Attached
@@ -430,6 +438,7 @@ export default function ReviewModal({
                   type="file"
                   accept="image/*"
                   onChange={handleFileChange}
+                  aria-required="true"
                   className="hidden"
                 />
                 <svg className="h-6 w-6 text-gray-400 mb-1" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -439,7 +448,7 @@ export default function ReviewModal({
                   {isUploadingPhoto ? 'Uploading image...' : 'Click to Upload Ground Photo'}
                 </span>
                 <span className="text-[10px] text-gray-400 mt-0.5">
-                  Supports JPG, PNG, WebP or camera capture (Max 10MB)
+                  Required · JPG, PNG, WebP or camera capture (Max 10MB)
                 </span>
               </label>
             )}
@@ -455,8 +464,8 @@ export default function ReviewModal({
             </button>
             <button
               type="submit"
-              disabled={isSubmitting || isUploadingPhoto || !isEligibleByDistance}
-              className="rounded-xl bg-[#01367d] px-5 py-2 text-xs font-bold text-white shadow hover:bg-[#ffb241] hover:text-[#011438] transition disabled:opacity-50 disabled:cursor-not-allowed"
+              disabled={isSubmitting || isUploadingPhoto || !isEligibleByDistance || !photoUrl}
+              className="rounded-xl bg-navy px-5 py-2 text-xs font-bold text-white shadow hover:bg-amber hover:text-navy-950 transition disabled:opacity-50 disabled:cursor-not-allowed"
             >
               {isSubmitting
                 ? 'Submitting Report...'
@@ -464,6 +473,8 @@ export default function ReviewModal({
                 ? 'Uploading Photo...'
                 : !isEligibleByDistance
                 ? 'Location Restricted (> 15 km)'
+                : !photoUrl
+                ? 'Attach a Ground Photo'
                 : 'Submit Eyewitness Report'}
             </button>
           </div>

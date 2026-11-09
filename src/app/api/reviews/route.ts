@@ -66,6 +66,14 @@ export async function POST(request: NextRequest) {
       );
     }
 
+    // Every citizen report must carry ground-photo evidence.
+    if (typeof photoUrl !== 'string' || !photoUrl.trim()) {
+      return Response.json(
+        { error: 'A ground photo is required to submit a citizen report.' },
+        { status: 400 }
+      );
+    }
+
     const numericRating = Math.max(1, Math.min(5, Number(rating)));
 
     // 1. Fetch Project Details for Location Verification
