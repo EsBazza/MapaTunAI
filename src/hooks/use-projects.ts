@@ -112,6 +112,8 @@ export function useProjects(params: ProjectsParams) {
 
 export interface ProjectDetailData extends ProjectWithRelations {
   riskScore: number;
+  /** Where the project is, resolved from GPS when the stored province is unreliable */
+  location?: { province: string; region: string; source: 'gps' | 'record' | 'unknown' };
   rawName?: string;
   avgRating?: number;
   reviewCount?: number;

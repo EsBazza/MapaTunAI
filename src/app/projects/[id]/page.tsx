@@ -1,344 +1,410 @@
 'use client';
 
-import { useState, use, useEffect } from 'react';
+import { useState, use, useEffect, useRef } from 'react';
 import Link from 'next/link';
+import { AnimatePresence, LayoutGroup, motion, useReducedMotion } from 'motion/react';
 import { SiteFooter } from '@/components/site-footer';
-import {
-  MapPin,
-  Building2,
-  Calendar,
-  Share2,
-  ExternalLink,
-  FileText,
-  Loader2,
-  ChevronRight,
-  ShieldAlert,
-} from 'lucide-react';
-import { useProject } from '@/hooks/use-projects';
-import { formatCurrency, formatDate, cleanContractorName } from '@/lib/format';
-import { getRiskScoreTier } from '@/lib/anomaly-flags';
+import { MapPin, Building2, Share2, ExternalLink, FileText, ChevronRight, ShieldAlert, RotateCw, Link2, Check } from 'lucide-react';
+import { useProject, type ProjectDetailData } from '@/hooks/use-projects';
+import { formatDate, cleanContractorName } from '@/lib/format';
+import { getDocumentUrl } from '@/lib/documents';
+import { CountUp, EASE_OUT, FadeIn, Shimmer } from '@/components/motion';
 import OverviewTab from './components/OverviewTab';
 import CommunityTab from './components/CommunityTab';
+import RiskGauge from './components/RiskGauge';
+import ProjectTimeline from './components/ProjectTimeline';
 
 interface PageProps {
   params: Promise<{ id: string }>;
 }
 
 type TabType = 'overview' | 'community';
+const TABS: TabType[] = ['overview', 'community'];
 
-export default function ProjectDossierPage({ params }: PageProps) {
-  const { id } = use(params);
-  const { data: project, isLoading, error, refetch } = useProject(id);
+function readHashTab(): TabType {
+  if (typeof window === 'undefined') return 'overview';
+  const hash = window.location.hash.replace('#', '') as TabType;
+  return TABS.includes(hash) ? hash : 'overview';
+}
 
-  const [activeTab, setActiveTab] = useState<TabType>('overview');
-  const [copied, setCopied] = useState<boolean>(false);
+/** Plain-language warning flags. The dot colour uses the risk tokens and always sits next to text. */
+function getFlags(p: ProjectDetailData) {
+  const flags: Array<{ label: string; dot: string }> = [];
+  if (p.flagOverpaid) flags.push({ label: 'Paid but little work done', dot: 'bg-risk-critical' });
+  if (p.flagStalled) flags.push({ label: 'No progress for 6+ months', dot: 'bg-risk-high' });
+  if (p.flagOverdue) flags.push({ label: 'Past deadline', dot: 'bg-risk-elevated' });
+  if (p.flagNeverStarted) flags.push({ label: 'Hasn’t started', dot: 'bg-white/50' });
+  if (p.flagPaymentPending) flags.push({ label: 'Payment not yet released', dot: 'bg-navy-300' });
+  return flags;
+}
 
-  // Sync with URL hash if provided
+/* ------------------------------------------------------------------ */
+/* Share menu: native sheet on phones, plus Facebook / Messenger / Viber */
+/* ------------------------------------------------------------------ */
+
+function ShareMenu({ title }: { title: string }) {
+  const reduce = useReducedMotion();
+  const [open, setOpen] = useState(false);
+  const [copied, setCopied] = useState<'idle' | 'copied' | 'failed'>('idle');
+  // Only rendered client-side (after the project query resolves), so reading matchMedia here is safe.
+  const [isTouch] = useState(() => typeof window !== 'undefined' && window.matchMedia('(pointer: coarse)').matches);
+  const wrapRef = useRef<HTMLDivElement>(null);
+  const buttonRef = useRef<HTMLButtonElement>(null);
+
   useEffect(() => {
-    if (typeof window !== 'undefined' && window.location.hash) {
-      const hash = window.location.hash.replace('#', '') as TabType;
-      const validTabs: TabType[] = ['overview', 'community'];
-      if (validTabs.includes(hash)) {
-        setTimeout(() => setActiveTab(hash), 0);
+    if (!open) return;
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') {
+        setOpen(false);
+        buttonRef.current?.focus();
+      }
+    };
+    const onDown = (e: PointerEvent) => {
+      if (wrapRef.current && !wrapRef.current.contains(e.target as Node)) setOpen(false);
+    };
+    window.addEventListener('keydown', onKey);
+    window.addEventListener('pointerdown', onDown);
+    return () => {
+      window.removeEventListener('keydown', onKey);
+      window.removeEventListener('pointerdown', onDown);
+    };
+  }, [open]);
+
+  const url = typeof window === 'undefined' ? '' : window.location.href.split('#')[0];
+  const text = `${title}: budget, work done, and what citizens report.`;
+
+  const onMainClick = async () => {
+    // Phones: the system share sheet already lists Messenger, Viber, etc.
+    if (isTouch && typeof navigator.share === 'function') {
+      try {
+        await navigator.share({ title, text, url });
+        return;
+      } catch (err) {
+        if ((err as Error)?.name === 'AbortError') return;
       }
     }
-  }, []);
-
-  const handleTabChange = (tab: TabType) => {
-    if (tab === 'overview' || tab === 'community') {
-      setActiveTab(tab);
-      if (typeof window !== 'undefined') {
-        window.history.replaceState(null, '', `#${tab}`);
-      }
-    }
+    setOpen((o) => !o);
   };
 
-  const handleShare = async () => {
-    if (typeof window !== 'undefined') {
-      await navigator.clipboard.writeText(window.location.href);
-      setCopied(true);
-      setTimeout(() => setCopied(false), 2500);
+  const copy = async () => {
+    try {
+      await navigator.clipboard.writeText(url);
+      setCopied('copied');
+    } catch {
+      setCopied('failed');
     }
+    setTimeout(() => setCopied('idle'), 2200);
   };
 
-  if (isLoading) {
-    return (
-      <div className="flex min-h-screen items-center justify-center bg-navy-950 text-white">
-        <div className="flex flex-col items-center gap-3">
-          <Loader2 className="h-8 w-8 animate-spin text-amber" />
-          <p className="text-sm font-bold tracking-wide text-white">
-            Loading public infrastructure dossier...
-          </p>
-          <span className="text-xs text-white/60 font-mono">Contract ID: {id}</span>
+  const enc = encodeURIComponent;
+  const items = [
+    { label: 'Facebook', href: `https://www.facebook.com/sharer/sharer.php?u=${enc(url)}` },
+    ...(isTouch
+      ? [
+          { label: 'Messenger', href: `fb-messenger://share/?link=${enc(url)}` },
+          { label: 'Viber', href: `viber://forward?text=${enc(`${text} ${url}`)}` },
+        ]
+      : []),
+  ];
+
+  return (
+    <div ref={wrapRef} className="relative">
+      <button
+        ref={buttonRef}
+        type="button"
+        onClick={onMainClick}
+        aria-haspopup="menu"
+        aria-expanded={open}
+        className="press inline-flex min-h-11 items-center gap-2 rounded-full border border-white/25 px-5 py-2.5 text-sm font-bold text-white transition-colors hover:bg-white/10"
+      >
+        <Share2 className="h-4 w-4" aria-hidden="true" />
+        Share
+      </button>
+      <AnimatePresence>
+        {open && (
+          <motion.div
+            role="menu"
+            className="absolute left-0 top-full z-40 mt-2 w-60 origin-top-left rounded-xl border border-white/15 bg-navy-950 p-1.5 text-sm text-white"
+            initial={reduce ? { opacity: 0 } : { opacity: 0, transform: 'scale(0.97)' }}
+            animate={reduce ? { opacity: 1 } : { opacity: 1, transform: 'scale(1)' }}
+            exit={{ opacity: 0, transition: { duration: 0.1 } }}
+            transition={{ duration: 0.15, ease: EASE_OUT }}
+          >
+            <button
+              type="button"
+              role="menuitem"
+              onClick={copy}
+              className="flex min-h-11 w-full items-center gap-2.5 rounded-lg px-3 text-left font-medium hover:bg-white/10"
+            >
+              {copied === 'copied' ? <Check className="h-4 w-4 text-risk-low" aria-hidden="true" /> : <Link2 className="h-4 w-4 text-amber" aria-hidden="true" />}
+              <span aria-live="polite">
+                {copied === 'copied' ? 'Link copied' : copied === 'failed' ? 'Couldn’t copy. Use the address bar.' : 'Copy link'}
+              </span>
+            </button>
+            {items.map((it) => (
+              <a
+                key={it.label}
+                role="menuitem"
+                href={it.href}
+                target="_blank"
+                rel="noopener noreferrer"
+                onClick={() => setOpen(false)}
+                className="flex min-h-11 w-full items-center gap-2.5 rounded-lg px-3 font-medium hover:bg-white/10"
+              >
+                <ExternalLink className="h-4 w-4 text-white/50" aria-hidden="true" />
+                Share on {it.label}
+              </a>
+            ))}
+          </motion.div>
+        )}
+      </AnimatePresence>
+    </div>
+  );
+}
+
+/* ------------------------------------------------------------------ */
+/* Latest satellite photo of the site, shown as a captioned figure.    */
+/* Hidden entirely when there is no photo (e.g. unconfirmed location). */
+/* ------------------------------------------------------------------ */
+
+function SitePhoto({ projectId }: { projectId: string }) {
+  const [state, setState] = useState<'loading' | 'loaded' | 'failed'>('loading');
+  if (state === 'failed') return null;
+  return (
+    <figure className="overflow-hidden rounded-2xl border border-white/15">
+      <div className="relative aspect-[4/3] bg-white/5">
+        {state === 'loading' && <Shimmer tone="dark" className="absolute inset-0 rounded-none" />}
+        {/* eslint-disable-next-line @next/next/no-img-element -- same-origin API image, sized server-side */}
+        <img
+          src={`/api/projects/${encodeURIComponent(projectId)}/satellite?when=latest`}
+          alt="Latest satellite photo of the project site. The marker shows the recorded location."
+          decoding="async"
+          onLoad={() => setState('loaded')}
+          onError={() => setState('failed')}
+          className={`h-full w-full object-cover transition-opacity duration-200 ${state === 'loaded' ? 'opacity-100' : 'opacity-0'}`}
+        />
+      </div>
+      <figcaption className="px-3 py-2 text-xs font-medium text-white/60">Latest satellite photo · Esri Wayback</figcaption>
+    </figure>
+  );
+}
+
+function LoadingState({ id }: { id: string }) {
+  return (
+    <div className="min-h-screen bg-canvas" aria-busy="true">
+      <span className="sr-only" aria-live="polite">Loading project {id}</span>
+      <div className="bg-navy-950 px-4 pt-8 pb-12 sm:px-12 lg:px-16">
+        <div className="mx-auto grid max-w-7xl gap-8 lg:grid-cols-[minmax(0,1fr)_300px]">
+          <div className="space-y-5">
+            <Shimmer tone="dark" className="h-3 w-48" />
+            <Shimmer tone="dark" className="h-9 w-3/4" />
+            <Shimmer tone="dark" className="h-9 w-1/2" />
+            <Shimmer tone="dark" className="h-20 w-full" />
+          </div>
+          <Shimmer tone="dark" className="hidden h-64 rounded-2xl lg:block" />
         </div>
       </div>
-    );
-  }
+      <div className="mx-auto max-w-7xl space-y-6 px-4 py-8 sm:px-12 lg:px-16">
+        <Shimmer className="h-40 rounded-2xl" />
+        <Shimmer className="h-64 rounded-2xl" />
+      </div>
+    </div>
+  );
+}
+
+export default function ProjectPage({ params }: PageProps) {
+  const { id } = use(params);
+  const { data: project, isLoading, error, refetch, isRefetching } = useProject(id);
+  const reduce = useReducedMotion();
+  const [activeTab, setActiveTab] = useState<TabType>(readHashTab);
+
+  const handleTabChange = (tab: TabType) => {
+    setActiveTab(tab);
+    window.history.replaceState(null, '', `#${tab}`);
+  };
+
+  if (isLoading) return <LoadingState id={id} />;
 
   if (error || !project) {
     return (
       <div className="flex min-h-screen flex-col items-center justify-center bg-navy-950 px-4 text-center text-white">
-        <ShieldAlert className="h-12 w-12 text-amber mb-3" />
-        <h2 className="text-xl font-black text-white">Project Record Not Found</h2>
-        <p className="text-xs text-white/70 max-w-sm mt-1 mb-6">
-          Could not retrieve contract details for ID <strong className="font-mono text-white">{id}</strong>.
-          The record may not exist in the DPWH database or has not yet been ingested.
+        <ShieldAlert className="mb-3 h-10 w-10 text-amber" aria-hidden="true" />
+        <h2 className="text-xl font-bold">We couldn&rsquo;t load this project</h2>
+        <p className="mt-2 mb-6 max-w-sm text-sm font-medium text-white/70">
+          Project <strong className="text-white">{id}</strong> may not be in our records yet, or the connection failed.
         </p>
-        <Link
-          href="/map"
-          className="rounded-full bg-amber px-6 py-2.5 text-xs font-black text-navy-950 hover:bg-amber-300 transition"
-        >
-          Return to National Map &rarr;
-        </Link>
+        <div className="flex flex-wrap items-center justify-center gap-3">
+          <button
+            type="button"
+            onClick={() => refetch()}
+            disabled={isRefetching}
+            className="press inline-flex min-h-11 items-center gap-2 rounded-full border border-white/25 px-5 py-2.5 text-sm font-bold transition-colors hover:bg-white/10 disabled:opacity-60"
+          >
+            <RotateCw className={`h-4 w-4 ${isRefetching ? 'animate-spin' : ''}`} aria-hidden="true" /> Try again
+          </button>
+          <Link href="/map" className="press inline-flex min-h-11 items-center rounded-full bg-amber px-6 py-2.5 text-sm font-bold text-navy-950 transition-colors hover:bg-amber-soft">
+            Back to the map
+          </Link>
+        </div>
       </div>
     );
   }
 
-  const contractorName = cleanContractorName(project.contractorRaw || 'Unknown Contractor');
-  const riskTier = getRiskScoreTier(project.riskScore || 0);
+  const contractorName = cleanContractorName(project.contractorRaw || 'Unknown contractor');
+  const paidPct = project.budgetPHP > 0 ? Math.round((project.amountPaid / project.budgetPHP) * 100) : null;
+  const flags = getFlags(project);
+  const documentUrl = getDocumentUrl(project.id, project.contractDocument);
+  const locationUnknown = project.location?.source === 'unknown';
+  const provinceName = project.location?.province || project.province?.name || '';
+  const regionName = locationUnknown ? '' : project.location?.region || project.province?.region?.name || '';
 
   const tabs: Array<{ id: TabType; label: string; count?: number }> = [
     { id: 'overview', label: 'Overview' },
-    { id: 'community', label: 'Citizen Reports', count: project.reviews?.length || 0 },
+    { id: 'community', label: 'Citizen reports', count: project.reviews?.length || 0 },
   ];
 
   return (
-    <div className="min-h-screen bg-canvas text-gray-900 selection:bg-amber/30 pb-20">
-      {/* --- HERO SECTION (Homepage Deep Navy Aesthetic) ---------- */}
-      <div className="relative w-full bg-navy-950 text-white px-6 sm:px-12 lg:px-16 pt-8 pb-12 rounded-b-[40px] shadow-2xl border-b border-navy/40 overflow-hidden">
-        {/* Layer 0: Subtle Dual Asset Overlay */}
-        <div
-          className="absolute inset-0 bg-cover bg-center opacity-25 mix-blend-screen pointer-events-none"
-          style={{ backgroundImage: "url('/bg2.jpg')" }}
-        />
-        <div
-          className="absolute inset-0 bg-cover bg-center opacity-30 mix-blend-overlay pointer-events-none"
-          style={{ backgroundImage: "url('/bg1.jpg')" }}
-        />
-        <div className="absolute inset-0 bg-gradient-to-r from-navy-800/95 via-navy/85 to-navy-950/95 pointer-events-none" />
-
-        <div className="relative z-10 mx-auto max-w-7xl space-y-6">
-          {/* Breadcrumb navigation */}
-          <nav className="flex flex-wrap items-center gap-2 text-xs font-semibold text-white/70">
-            <Link
-              href="/"
-              className="flex items-center gap-1 text-white hover:text-amber transition"
-            >
-              <span>MAPATUNAI</span>
-            </Link>
-            <ChevronRight className="h-3 w-3 text-white/40" />
-            <Link
-              href={`/map?project=${encodeURIComponent(project.id)}`}
-              className="flex items-center gap-1 font-bold text-amber hover:underline transition"
-            >
-              <MapPin className="h-3.5 w-3.5" />
-              <span>National Map</span>
-            </Link>
-            <ChevronRight className="h-3 w-3 text-white/40" />
-            <span>{project.province?.region?.name || 'Region'}</span>
-            <ChevronRight className="h-3 w-3 text-white/40" />
-            <span>{project.province?.name || 'Province'}</span>
-            <ChevronRight className="h-3 w-3 text-white/40" />
-            <span className="font-mono text-white/90 bg-white/10 px-2 py-0.5 rounded-md">{project.id}</span>
-          </nav>
-
-          {/* Anomaly Badges (Zero Emojis, Clean Monospace Micro-Dots) */}
-          <div className="flex flex-wrap items-center gap-2 font-mono text-[11px]">
-            {project.flagOverpaid && (
-              <span className="inline-flex items-center gap-1.5 rounded-full border border-red-500/40 bg-red-950/60 px-3 py-1 font-bold text-red-200">
-                <span className="h-2 w-2 rounded-full bg-red-500 animate-pulse" />
-                OVERPAID (GHOST RISK)
-              </span>
-            )}
-            {project.flagStalled && (
-              <span className="inline-flex items-center gap-1.5 rounded-full border border-amber-500/40 bg-amber-950/60 px-3 py-1 font-bold text-amber-200">
-                <span className="h-2 w-2 rounded-full bg-amber" />
-                STALLED WORKS
-              </span>
-            )}
-            {project.flagOverdue && (
-              <span className="inline-flex items-center gap-1.5 rounded-full border border-amber-500/30 bg-amber-900/40 px-3 py-1 font-semibold text-amber-200">
-                <span className="h-1.5 w-1.5 rounded-full bg-amber" />
-                OVERDUE MILESTONE
-              </span>
-            )}
-            {project.flagNeverStarted && (
-              <span className="inline-flex items-center gap-1.5 rounded-full border border-white/20 bg-white/10 px-3 py-1 font-semibold text-slate-200">
-                <span className="h-1.5 w-1.5 rounded-full bg-slate-400" />
-                NEVER STARTED
-              </span>
-            )}
-            {project.flagPaymentPending && (
-              <span className="inline-flex items-center gap-1.5 rounded-full border border-blue-400/30 bg-blue-900/40 px-3 py-1 font-semibold text-blue-200">
-                <span className="h-1.5 w-1.5 rounded-full bg-blue-400" />
-                PAYMENT PENDING
-              </span>
-            )}
-            <span className="rounded-full border border-white/15 bg-white/10 px-3 py-1 font-medium text-white/80 uppercase">
-              {project.category}
-            </span>
-          </div>
-
-          {/* Project Title and Metadata */}
-          <div>
-            <h1 className="text-2xl sm:text-3xl lg:text-4xl font-black text-white tracking-tight leading-tight">
-              {project.name}
-            </h1>
-            <div className="flex flex-wrap items-center gap-5 text-xs text-white/80 mt-3 font-semibold">
+    <div className="min-h-screen bg-canvas pb-20 text-ink selection:bg-amber/30">
+      <header className="w-full border-b border-navy-900 bg-navy-950 px-4 pt-8 pb-12 text-white sm:px-12 lg:px-16">
+        <div className="mx-auto grid max-w-7xl gap-10 lg:grid-cols-[minmax(0,1fr)_300px]">
+          <FadeIn immediate className="min-w-0 space-y-6">
+            <nav aria-label="Breadcrumb" className="flex flex-wrap items-center gap-2 text-sm font-medium text-white/70">
+              <Link href="/" className="hover:text-white">Home</Link>
+              <ChevronRight className="h-3.5 w-3.5 text-white/40" aria-hidden="true" />
+              {regionName && (
+                <>
+                  <span>{regionName}</span>
+                  <ChevronRight className="h-3.5 w-3.5 text-white/40" aria-hidden="true" />
+                </>
+              )}
+              <span className={locationUnknown ? 'italic' : ''}>{provinceName}</span>
               <Link
-                href={`/contractors?q=${encodeURIComponent(contractorName)}`}
-                className="inline-flex items-center gap-1.5 text-white hover:text-amber transition group"
-                title="View Contractor Profile in Registry"
+                href={`/map?project=${encodeURIComponent(project.id)}`}
+                className="ml-1 inline-flex items-center gap-1 font-bold text-amber hover:underline"
               >
-                <Building2 className="h-4 w-4 text-amber" />
-                <span className="text-sm font-bold group-hover:underline">{contractorName}</span>
-                <ExternalLink className="h-3 w-3 text-white/50 group-hover:text-amber" />
+                <MapPin className="h-3.5 w-3.5" aria-hidden="true" /> Show on map
               </Link>
-              <div className="flex items-center gap-1.5">
-                <Calendar className="h-4 w-4 text-white/60" />
-                <span>
-                  {formatDate(project.startDate)} &rarr;{' '}
-                  {project.completionDate ? formatDate(project.completionDate) : 'Ongoing'}
-                </span>
-              </div>
-              <span className="font-mono text-white/60 bg-white/10 px-2 py-0.5 rounded">
-                CONTRACT: {project.id}
-              </span>
-            </div>
-          </div>
+            </nav>
 
-          {/* 4 Stat Cards in a Row */}
-          <div className="grid grid-cols-2 md:grid-cols-4 gap-3.5 pt-2">
-            {/* Card 1: Budget */}
-            <div className="rounded-2xl border border-white/15 bg-white/10 p-4 backdrop-blur-md shadow-md">
-              <span className="text-[10px] font-mono font-bold uppercase tracking-wider text-white/60">
-                Approved Budget
-              </span>
-              <p className="text-xl sm:text-2xl font-mono font-black text-white mt-1">
-                {formatCurrency(project.budgetPHP)}
+            <div className="space-y-3">
+              <p className="text-sm font-medium text-white/70">
+                {project.category} · {project.status}
               </p>
-              <span className="text-[10px] text-white/60">Official Allocation</span>
-            </div>
-
-            {/* Card 2: Disbursed */}
-            <div className="rounded-2xl border border-white/15 bg-white/10 p-4 backdrop-blur-md shadow-md">
-              <span className="text-[10px] font-mono font-bold uppercase tracking-wider text-white/60">
-                Amount Disbursed
-              </span>
-              <p className="text-xl sm:text-2xl font-mono font-black text-amber mt-1">
-                {formatCurrency(project.amountPaid)}
-              </p>
-              <span className="text-[10px] text-white/60 font-mono">
-                {project.budgetPHP > 0
-                  ? `${Math.round((project.amountPaid / project.budgetPHP) * 100)}% of total budget`
-                  : '—'}
-              </span>
-            </div>
-
-            {/* Card 3: Physical Progress */}
-            <div className="rounded-2xl border border-white/15 bg-white/10 p-4 backdrop-blur-md shadow-md">
-              <span className="text-[10px] font-mono font-bold uppercase tracking-wider text-white/60">
-                Physical Progress
-              </span>
-              <p className="text-xl sm:text-2xl font-mono font-black text-emerald-400 mt-1">
-                {Math.round(project.progress)}%
-              </p>
-              <span className="text-[10px] text-white/60">DPWH Claimed</span>
-            </div>
-
-            {/* Card 4: Composite Risk Score */}
-            <div className="rounded-2xl border border-white/15 bg-white/10 p-4 backdrop-blur-md shadow-md">
-              <div className="flex items-center justify-between">
-                <span className="text-[10px] font-mono font-bold uppercase tracking-wider text-white/60">
-                  Forensic Risk Score
-                </span>
-                <span className="rounded px-2 py-0.5 text-[9px] font-mono font-bold uppercase bg-white/20 text-white">
-                  {riskTier.label}
-                </span>
-              </div>
-              <p className="text-xl sm:text-2xl font-mono font-black text-white mt-1">
-                {project.riskScore}
-                <span className="text-xs font-normal text-white/50">/100</span>
-              </p>
-              <span className="text-[10px] text-white/60">Multi-Factor Analysis</span>
-            </div>
-          </div>
-
-          {/* Action Buttons Bar */}
-          <div className="flex flex-wrap items-center gap-3 pt-2">
-            {/* View Document Button (Opens actual contract document PDF in new tab) */}
-            <a
-              href={
-                project.contractDocument?.contractAgreementUrl ||
-                project.contractDocument?.noticeToProceedUrl ||
-                project.contractDocument?.noticeOfAwardUrl ||
-                (project.contractDocument?.sourcePdfUrl &&
-                project.contractDocument.sourcePdfUrl.startsWith('http') &&
-                !project.contractDocument.sourcePdfUrl.includes('dpwh.gov.ph')
-                  ? project.contractDocument.sourcePdfUrl
-                  : `/api/projects/${encodeURIComponent(project.id)}/document`)
-              }
-              target="_blank"
-              rel="noopener noreferrer"
-              className="inline-flex items-center gap-2 rounded-full bg-amber px-5 py-2.5 text-xs font-black text-navy-950 shadow hover:bg-amber-300 transition"
-            >
-              <FileText className="h-4 w-4" />
-              <span>View Document &rarr;</span>
-            </a>
-
-            <button
-              onClick={handleShare}
-              className="inline-flex items-center gap-2 rounded-full border border-white/20 bg-white/10 px-4 py-2.5 text-xs font-bold text-white hover:bg-white/20 transition"
-            >
-              <Share2 className="h-4 w-4" />
-              <span>{copied ? 'Link Copied!' : 'Share Dossier'}</span>
-            </button>
-          </div>
-        </div>
-      </div>
-
-      {/* --- TAB NAVIGATION STRIP (Homepage Aesthetic) ----------- */}
-      <div className="sticky top-0 z-30 border-b border-navy/15 bg-white/95 backdrop-blur-md px-6 sm:px-12 lg:px-16 shadow-xs">
-        <div className="mx-auto max-w-7xl">
-          <div className="flex space-x-2 overflow-x-auto py-3 scrollbar-none">
-            {tabs.map((tab) => {
-              const isActive = activeTab === tab.id;
-              return (
-                <button
-                  key={tab.id}
-                  onClick={() => handleTabChange(tab.id)}
-                  className={`flex items-center gap-2 whitespace-nowrap rounded-full px-5 py-2 text-xs font-black transition-all ${
-                    isActive
-                      ? 'bg-navy text-white shadow-md'
-                      : 'text-gray-600 hover:bg-gray-100 hover:text-gray-900'
-                  }`}
+              <h1 className="text-2xl font-bold leading-tight tracking-tight break-words sm:text-3xl lg:text-4xl">{project.name}</h1>
+              <div className="flex flex-wrap items-center gap-x-5 gap-y-2 text-sm font-medium text-white/80">
+                <Link
+                  href={`/contractors?q=${encodeURIComponent(contractorName)}`}
+                  className="inline-flex items-center gap-1.5 hover:text-amber"
+                  title="See this contractor's other projects"
                 >
-                  <span>{tab.label}</span>
-                  {tab.count !== undefined && (
-                    <span
-                      className={`rounded-full px-2 py-0.5 text-[10px] font-mono ${
-                        isActive
-                          ? 'bg-amber text-navy-950 font-bold'
-                          : 'bg-gray-200 text-gray-700'
-                      }`}
-                    >
-                      {tab.count}
-                    </span>
-                  )}
-                </button>
-              );
-            })}
-          </div>
+                  <Building2 className="h-4 w-4 text-amber" aria-hidden="true" />
+                  <span className="font-bold text-white underline-offset-2 hover:underline">{contractorName}</span>
+                </Link>
+                <span>
+                  {formatDate(project.startDate)} to {project.completionDate ? formatDate(project.completionDate) : 'no deadline given'}
+                </span>
+                <span className="tabular text-white/60">Contract {project.id}</span>
+              </div>
+            </div>
+
+            {flags.length > 0 && (
+              <ul className="flex flex-wrap gap-2" aria-label="Warning signs from the records">
+                {flags.map((f) => (
+                  <li key={f.label} className="inline-flex items-center gap-2 rounded-full border border-white/20 px-3 py-1 text-sm font-medium">
+                    <span className={`h-2 w-2 rounded-full ${f.dot}`} aria-hidden="true" />
+                    {f.label}
+                  </li>
+                ))}
+              </ul>
+            )}
+
+            <dl className="grid grid-cols-1 divide-y divide-white/15 border-y border-white/15 sm:grid-cols-3 sm:divide-x sm:divide-y-0">
+              <div className="py-4 sm:pr-6">
+                <dt className="text-sm font-medium text-white/70">Budget</dt>
+                <dd className="mt-1 text-2xl font-bold"><CountUp value={project.budgetPHP} format="currency" /></dd>
+              </div>
+              <div className="py-4 sm:px-6">
+                <dt className="text-sm font-medium text-white/70">Paid so far</dt>
+                <dd className="mt-1 text-2xl font-bold text-amber"><CountUp value={project.amountPaid} format="currency" /></dd>
+                <dd className="text-xs font-medium text-white/60">{paidPct === null ? 'Budget unknown' : `${paidPct}% of the budget`}</dd>
+              </div>
+              <div className="py-4 sm:pl-6">
+                <dt className="text-sm font-medium text-white/70">Work done</dt>
+                <dd className="mt-1 text-2xl font-bold"><CountUp value={Math.round(project.progress)} format="percent" /></dd>
+                <dd className="text-xs font-medium text-white/60">As reported by DPWH</dd>
+              </div>
+            </dl>
+
+            <div className="flex flex-wrap items-center gap-3">
+              <a
+                href={documentUrl}
+                target="_blank"
+                rel="noopener noreferrer"
+                className="press inline-flex min-h-11 items-center gap-2 rounded-full bg-amber px-5 py-2.5 text-sm font-bold text-navy-950 transition-colors hover:bg-amber-soft"
+              >
+                <FileText className="h-4 w-4" aria-hidden="true" /> View contract document
+              </a>
+              <ShareMenu title={project.name} />
+            </div>
+          </FadeIn>
+
+          <FadeIn immediate delay={0.05} className="space-y-4">
+            <RiskGauge score={project.riskScore || 0} />
+            <SitePhoto projectId={project.id} />
+          </FadeIn>
+        </div>
+      </header>
+
+      <div className="sticky top-0 z-30 border-b border-line bg-surface px-4 sm:px-12 lg:px-16">
+        <div className="mx-auto max-w-7xl">
+          <LayoutGroup id="project-tabs">
+            <div role="tablist" aria-label="Project sections" className="flex space-x-2 overflow-x-auto py-3 scrollbar-none">
+              {tabs.map((tab) => {
+                const isActive = activeTab === tab.id;
+                return (
+                  <button
+                    key={tab.id}
+                    type="button"
+                    role="tab"
+                    id={`tab-${tab.id}`}
+                    aria-controls={`panel-${tab.id}`}
+                    aria-selected={isActive}
+                    onClick={() => handleTabChange(tab.id)}
+                    className={`press relative flex min-h-10 items-center gap-2 whitespace-nowrap rounded-full px-5 py-2 text-sm font-bold transition-colors ${
+                      isActive ? 'text-white' : 'text-ink-muted hover:bg-sunken hover:text-ink'
+                    }`}
+                  >
+                    {isActive && (
+                      <motion.span
+                        layoutId="tab-pill"
+                        className="absolute inset-0 rounded-full bg-navy"
+                        transition={{ duration: reduce ? 0 : 0.2, ease: EASE_OUT }}
+                      />
+                    )}
+                    <span className="relative">{tab.label}</span>
+                    {tab.count !== undefined && (
+                      <span className={`relative tabular text-xs font-medium ${isActive ? 'text-amber' : 'text-ink-subtle'}`}>{tab.count}</span>
+                    )}
+                  </button>
+                );
+              })}
+            </div>
+          </LayoutGroup>
         </div>
       </div>
 
-      {/* --- TAB CONTENT PANELS --------------------------------- */}
-      <main className="mx-auto max-w-7xl px-6 sm:px-12 lg:px-16 py-8">
-        <div className={activeTab === 'overview' ? 'block' : 'hidden'}>
-          <OverviewTab project={project} onNavigateTab={(tab) => handleTabChange(tab as TabType)} />
+      <main className="mx-auto max-w-7xl px-4 py-8 sm:px-12 lg:px-16">
+        <div role="tabpanel" id="panel-overview" aria-labelledby="tab-overview" hidden={activeTab !== 'overview'} className="space-y-8">
+          <ProjectTimeline
+            startDate={project.startDate}
+            completionDate={project.completionDate}
+            status={project.status}
+            progress={project.progress}
+            reports={(project.reviews || []).map((r) => ({ id: r.id, createdAt: r.createdAt }))}
+          />
+          <OverviewTab project={project} />
         </div>
-
-        <div className={activeTab === 'community' ? 'block' : 'hidden'}>
+        <div role="tabpanel" id="panel-community" aria-labelledby="tab-community" hidden={activeTab !== 'community'}>
           <CommunityTab project={project} onReviewSubmitted={() => refetch()} />
         </div>
       </main>

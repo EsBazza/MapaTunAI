@@ -2,7 +2,7 @@
 
 import Link from 'next/link';
 import { formatCurrency, cleanContractorName } from '@/lib/format';
-import { STATUS_COLORS, FLAG_COLORS } from '@/lib/constants';
+import { STATUS_COLORS, FLAG_COLORS, FLAG_LABELS } from '@/lib/constants';
 import type { ProjectWithRelations } from '@/hooks/use-projects';
 
 interface ProjectCardProps {
@@ -67,7 +67,7 @@ export function ProjectCard({ project }: ProjectCardProps) {
               key={flag}
               className={`rounded-full border px-2 py-0.5 text-xs font-medium ${FLAG_COLORS[flag] ?? 'bg-gray-100 text-gray-700'}`}
             >
-              {flag}
+              {FLAG_LABELS[flag] ?? flag}
             </span>
           ))}
         </div>

@@ -74,23 +74,23 @@ const LAYERS: { code: string; icon: LucideIcon; eyebrow: string; title: string; 
   {
     code: 'L1',
     icon: FileText,
-    eyebrow: 'Layer 1 — Government claims',
-    title: 'What the government claims',
-    body: 'Official data feeds direct from DPWH and national budgets. We track contract amounts, reported physical completion rates, source of funds, and official agency field inspection updates.',
+    eyebrow: 'Source 1 — Government records',
+    title: 'What the government reports',
+    body: 'Contract amounts, how much has been paid, how much work DPWH says is done, and the deadlines — taken from DPWH’s public records.',
   },
   {
     code: 'L2',
     icon: Users,
-    eyebrow: 'Layer 2 — Citizens experience',
-    title: 'What citizens experience',
-    body: 'Whistleblower reviews and 5-star quality ratings submitted by local community members on the ground, verified with anti-spam phone OTP and geo-tagged site photos.',
+    eyebrow: 'Source 2 — People near the site',
+    title: 'What people on the ground see',
+    body: 'Reports from people within 15 km of the project, each with a photo from the site. A text code to your phone can confirm the report is from a real person.',
   },
   {
     code: 'L3',
     icon: Satellite,
-    eyebrow: 'Layer 3 — Satellite proof',
-    title: 'What satellites prove',
-    body: 'ESRI Wayback before-and-after satellite sliders and 360° Google Street View to visually verify whether a ₱100M road or bridge was actually paved, or remains bare dirt.',
+    eyebrow: 'Source 3 — Satellite photos',
+    title: 'What satellite photos show',
+    body: 'Photos of the same spot from before the project started and today, so you can see whether a road or dike was actually built. Photos can be old or cloudy, so they are a clue, not proof.',
   },
 ];
 
@@ -161,17 +161,17 @@ export function HowItWorks({ stats, loading }: { stats?: HowItWorksStats; loadin
         <div>
           <p className="font-mono text-xs font-semibold uppercase tracking-[0.16em] text-amber-ink">How it works</p>
           <h2 id="method-title" className="mt-4 text-4xl font-extrabold leading-[1.05] text-navy sm:text-5xl lg:text-[3.15rem]">
-            Why thousands of citizens trust{' '}
+            How{' '}
             <span className="whitespace-nowrap uppercase tracking-[-0.03em]">
               <span className="text-signal">Mapa</span>
               <span className="text-navy">Tun</span>
               <span className="text-amber-deep">AI</span>
             </span>{' '}
-            for infrastructure accountability
+            checks a project
           </h2>
           <p className="mt-6 max-w-xl text-lg leading-relaxed text-ink-muted">
-            Every public infrastructure project in the Philippines is investigated by contrasting three separate layers
-            of evidence: official government records, ground-level citizen reports, and satellite imagery.
+            Each project is checked three ways: what the government reports, what people near the site see, and what
+            satellite photos show over the years.
           </p>
 
           <div className="mt-8 flex items-center gap-4">
@@ -182,7 +182,7 @@ export function HowItWorks({ stats, loading }: { stats?: HowItWorksStats; loadin
                 </span>
               ))}
             </div>
-            <p className="font-mono text-xs font-semibold uppercase tracking-[0.14em] text-navy">Verified civic data pipeline</p>
+            <p className="font-mono text-xs font-semibold uppercase tracking-[0.14em] text-navy">Three sources, side by side</p>
           </div>
 
           <dl ref={statsRef} className="mt-10 grid grid-cols-3 gap-6 border-t border-line pt-8">

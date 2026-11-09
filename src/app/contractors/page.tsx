@@ -1,157 +1,124 @@
 'use client';
 
-import { useState, useEffect } from 'react';
-import { useRouter } from 'next/navigation';
+import { Suspense, useCallback, useEffect, useState } from 'react';
+import Link from 'next/link';
+import { usePathname, useRouter, useSearchParams } from 'next/navigation';
+import { keepPreviousData, useQuery } from '@tanstack/react-query';
 import { SiteFooter } from '@/components/site-footer';
-import { useContractors } from '@/hooks/use-projects';
-import { formatCurrency } from '@/lib/format';
+import ContractorCard from './components/ContractorCard';
+import ContractorDetails from './components/ContractorDetails';
+import ContractorProjectsDrawer from './components/ContractorProjectsDrawer';
+import { AnimatePresence } from 'motion/react';
+import type {
+  Contractor,
+  ContractorListResponse,
+  ContractorSortField,
+  RiskFilter,
+} from './components/types';
 
-interface ContractorNodeData {
-  id: string;
-  label: string;
-  totalValue: number;
-  totalContracts: number;
-  avgProgress: number;
-  overdueCount: number;
-  terminatedCount: number;
+const PAGE_SIZE = 12;
+const SEARCH_DEBOUNCE_MS = 300;
+
+const FILTERS: Array<{ id: RiskFilter; label: string; activeClass: string }> = [
+  { id: 'all', label: 'All', activeClass: 'bg-white text-navy' },
+  { id: 'clean', label: 'No delays', activeClass: 'bg-emerald-500 text-white' },
+  { id: 'delayed', label: 'Some late', activeClass: 'bg-amber text-navy' },
+  { id: 'high', label: 'Many late / cancelled', activeClass: 'bg-signal text-white' },
+];
+
+const SORT_OPTIONS: Array<{ value: ContractorSortField; label: string }> = [
+  { value: 'totalValuePHP', label: 'Total value (₱)' },
+  { value: 'totalContracts', label: 'Number of projects' },
+  { value: 'overdueCount', label: 'Late projects' },
+  { value: 'avgProgress', label: 'Average work done' },
+];
+
+function useDebouncedValue<T>(value: T, delayMs: number): T {
+  const [debounced, setDebounced] = useState(value);
+  useEffect(() => {
+    const t = setTimeout(() => setDebounced(value), delayMs);
+    return () => clearTimeout(t);
+  }, [value, delayMs]);
+  return debounced;
 }
 
-export default function ContractorsPage() {
+function ContractorsContent() {
   const router = useRouter();
-  
-  const [searchTerm, setSearchTerm] = useState('');
-  const [selectedContractor, setSelectedContractor] = useState<ContractorNodeData | null>(null);
-  const [sortBy, setSortBy] = useState<'totalValuePHP' | 'totalContracts' | 'overdueCount' | 'avgProgress'>('totalValuePHP');
+  const pathname = usePathname();
+  const searchParams = useSearchParams();
+  const initialQuery = searchParams.get('q') ?? '';
+
+  const [searchTerm, setSearchTerm] = useState(initialQuery);
+  const debouncedSearch = useDebouncedValue(searchTerm.trim(), SEARCH_DEBOUNCE_MS);
+  const [sortBy, setSortBy] = useState<ContractorSortField>('totalValuePHP');
   const [sortOrder, setSortOrder] = useState<'desc' | 'asc'>('desc');
-  const [filterRisk, setFilterRisk] = useState<'all' | 'clean' | 'overdue' | 'highrisk'>('all');
+  const [filterRisk, setFilterRisk] = useState<RiskFilter>('all');
   const [page, setPage] = useState(1);
+  const [selectedId, setSelectedId] = useState<string | null>(null);
+  const [drawerContractor, setDrawerContractor] = useState<string | null>(null);
 
-  // Slide-over drawer state
-  const [activeDrawerContractor, setActiveDrawerContractor] = useState<{ name: string; id: string } | null>(null);
-  const [drawerProjects, setDrawerProjects] = useState<any[]>([]);
-  const [isDrawerLoading, setIsDrawerLoading] = useState(false);
-
-  // Fetch won projects when drawer contractor is opened
+  // ?q= seeds the search on arrival (e.g. from a project page link); after that,
+  // keep the URL in sync with the debounced search so it can be shared.
   useEffect(() => {
-    if (!activeDrawerContractor) {
-      setDrawerProjects([]);
-      setIsDrawerLoading(false);
-      return;
-    }
+    const current = searchParams.get('q') ?? '';
+    if (current === debouncedSearch) return;
+    const params = new URLSearchParams(searchParams.toString());
+    if (debouncedSearch) params.set('q', debouncedSearch);
+    else params.delete('q');
+    const qs = params.toString();
+    router.replace(qs ? `${pathname}?${qs}` : pathname, { scroll: false });
+  }, [debouncedSearch, pathname, router, searchParams]);
 
-    let isMounted = true;
-    setIsDrawerLoading(true);
-
-    async function fetchDrawerProjects() {
-      try {
-        let res = await fetch(`/api/projects?contractor=${encodeURIComponent(activeDrawerContractor!.name)}&limit=50`);
-        let data = await res.json();
-        if (!data.projects || data.projects.length === 0) {
-          res = await fetch(`/api/projects?q=${encodeURIComponent(activeDrawerContractor!.name)}&limit=50`);
-          data = await res.json();
-        }
-        if (isMounted) {
-          setDrawerProjects(data.projects || []);
-        }
-      } catch (err) {
-        console.error('Failed to load drawer projects:', err);
-        if (isMounted) {
-          setDrawerProjects([]);
-        }
-      } finally {
-        if (isMounted) {
-          setIsDrawerLoading(false);
-        }
-      }
-    }
-
-    fetchDrawerProjects();
-
-    return () => {
-      isMounted = false;
-    };
-  }, [activeDrawerContractor]);
-
-  // Lock body scroll and attach Escape key listener when drawer is open
-  useEffect(() => {
-    if (activeDrawerContractor) {
-      document.body.style.overflow = 'hidden';
-      const handleKeyDown = (e: KeyboardEvent) => {
-        if (e.key === 'Escape') {
-          setActiveDrawerContractor(null);
-        }
-      };
-      window.addEventListener('keydown', handleKeyDown);
-      return () => {
-        document.body.style.overflow = '';
-        window.removeEventListener('keydown', handleKeyDown);
-      };
-    } else {
-      document.body.style.overflow = '';
-    }
-  }, [activeDrawerContractor]);
-
-  // Query paginated contractors for leaderboard
-  const { data: contractorsData, isLoading: isTableLoading } = useContractors({
-    q: searchTerm.trim() || undefined,
-    page,
-    limit: 12,
-    sort: sortBy,
-    order: sortOrder,
+  const { data, isLoading, isError, isFetching, refetch } = useQuery<ContractorListResponse>({
+    queryKey: ['contractors', { q: debouncedSearch, page, sortBy, sortOrder, filterRisk }],
+    queryFn: async () => {
+      const params = new URLSearchParams({
+        page: String(page),
+        limit: String(PAGE_SIZE),
+        sort: sortBy,
+        order: sortOrder,
+      });
+      if (debouncedSearch) params.set('q', debouncedSearch);
+      if (filterRisk !== 'all') params.set('risk', filterRisk);
+      const res = await fetch(`/api/contractors?${params.toString()}`);
+      if (!res.ok) throw new Error('Failed to fetch contractors');
+      return res.json();
+    },
+    placeholderData: keepPreviousData,
   });
 
-  const rawContractorsList = contractorsData?.contractors || [];
-  const contractorsList = rawContractorsList.filter((c) => {
-    if (filterRisk === 'clean') return c.overdueCount === 0 && c.terminatedCount === 0;
+  const contractors = data?.contractors ?? [];
+  const totalPages = data?.pagination.totalPages ?? 1;
+  const total = data?.pagination.total ?? 0;
+  const selected: Contractor | null =
+    contractors.find((c) => c.id === selectedId) ?? contractors[0] ?? null;
 
-    if (filterRisk === 'overdue') return c.overdueCount > 0 && c.overdueCount <= 3;
-    if (filterRisk === 'highrisk') return c.overdueCount > 3 || c.terminatedCount > 0;
-    return true;
-  });
-
-  const totalPages = contractorsData?.pagination?.totalPages || 1;
-
-  // Currently inspected contractor (default to top contractor if none clicked)
-  const activeContractor = selectedContractor || (contractorsList.length > 0 ? {
-    id: contractorsList[0].id,
-    label: contractorsList[0].name,
-    totalValue: contractorsList[0].totalValuePHP,
-    totalContracts: contractorsList[0].totalContracts,
-    avgProgress: contractorsList[0].avgProgress,
-    overdueCount: contractorsList[0].overdueCount,
-    terminatedCount: contractorsList[0].terminatedCount,
-  } : null);
-
-  const summaryStats = {
-    clean: rawContractorsList.filter((c) => c.overdueCount === 0 && c.terminatedCount === 0).length,
-    overdue: rawContractorsList.filter((c) => c.overdueCount > 0 && c.terminatedCount === 0).length,
-    terminated: rawContractorsList.filter((c) => c.terminatedCount > 0).length,
+  const changeFilter = (id: RiskFilter) => {
+    setFilterRisk(id);
+    setPage(1);
   };
 
+  const closeDrawer = useCallback(() => setDrawerContractor(null), []);
+
   return (
-    <div className="w-full min-h-screen bg-canvas text-gray-900 p-0 m-0 overflow-x-hidden font-sans">
-      
-      {/* -- Top Header Hero Banner (Klatschboard Premium Style) -------- */}
-      <div className="relative w-full bg-navy-950 text-white px-6 sm:px-12 lg:px-16 pt-10 pb-16 rounded-b-[48px] shadow-2xl border-b border-navy/40">
-        
-        {/* Layer 0: Dual Asset Overlay */}
+    <div className="w-full min-h-screen bg-canvas text-gray-900 overflow-x-hidden font-sans">
+      {/* Header */}
+      <div className="relative w-full bg-navy-950 text-white px-4 sm:px-12 lg:px-16 pt-10 pb-14 rounded-b-[40px] shadow-2xl border-b border-navy/40">
         <div
-          className="absolute inset-0 bg-cover bg-center opacity-30 mix-blend-screen pointer-events-none rounded-b-[48px]"
+          className="absolute inset-0 bg-cover bg-center opacity-30 mix-blend-screen pointer-events-none rounded-b-[40px]"
           style={{ backgroundImage: "url('/bg2.jpg')" }}
         />
         <div
-          className="absolute inset-0 bg-cover bg-center opacity-40 mix-blend-overlay pointer-events-none rounded-b-[48px]"
+          className="absolute inset-0 bg-cover bg-center opacity-40 mix-blend-overlay pointer-events-none rounded-b-[40px]"
           style={{ backgroundImage: "url('/bg1.jpg')" }}
         />
-        <div className="absolute inset-0 bg-gradient-to-r from-navy-800/95 via-navy/85 to-navy-950/95 pointer-events-none rounded-b-[48px]" />
+        <div className="absolute inset-0 bg-gradient-to-r from-navy-800/95 via-navy/85 to-navy-950/95 pointer-events-none rounded-b-[40px]" />
 
-        <div className="relative z-10 flex flex-col lg:flex-row lg:items-center justify-between gap-8">
-          
-          {/* Brand & Page Title */}
+        <div className="relative z-10 flex flex-col lg:flex-row lg:items-end justify-between gap-8">
           <div className="space-y-2">
             <div className="inline-flex items-center gap-2 rounded-full bg-white/10 px-4 py-1.5 text-xs font-black text-white border border-white/20 backdrop-blur-md">
               <span className="h-2 w-2 rounded-full bg-amber" />
-              NATIONAL CONTRACTOR ACCOUNTABILITY REGISTRY
+              WHO BUILDS OUR PUBLIC WORKS
             </div>
             <h1 className="text-4xl sm:text-5xl lg:text-6xl font-black tracking-tight text-white uppercase leading-none">
               <span className="text-signal">MAPA</span>
@@ -159,538 +126,198 @@ export default function ContractorsPage() {
               <span className="text-amber">AI</span> Contractors
             </h1>
             <p className="text-sm sm:text-base text-white/85 max-w-2xl font-medium leading-relaxed">
-              Explore joint-venture co-occurrences, historical project delays, and dominant contractors across 248,000+ public works contracts.
+              See which companies won government projects, how much they were given, and how many of their projects are late.
             </p>
           </div>
 
-          {/* Filter Pills Capsule & Top Right Action CTA */}
-          <div className="flex flex-wrap items-center gap-3.5">
-            
-            {/* Filter Pills Container */}
-            <div className="flex items-center bg-white/10 p-1.5 rounded-full border border-white/20 backdrop-blur-md text-xs font-bold shadow-lg">
-              <span className="px-3.5 text-white/70 text-[11px] font-black uppercase tracking-wider">Show:</span>
-              <button
-                onClick={() => setFilterRisk('all')}
-                className={`px-4 py-2 rounded-full transition-all duration-200 ${
-                  filterRisk === 'all'
-                    ? 'bg-white text-navy font-black shadow-md scale-105'
-                    : 'text-white/80 hover:text-white'
-                }`}
-              >
-                All
-              </button>
-              <button
-                onClick={() => setFilterRisk('clean')}
-                className={`px-4 py-2 rounded-full transition-all duration-200 ${
-                  filterRisk === 'clean'
-                    ? 'bg-emerald-500 text-white font-black shadow-md scale-105'
-                    : 'text-white/80 hover:text-white'
-                }`}
-              >
-                Clean
-              </button>
-              <button
-                onClick={() => setFilterRisk('overdue')}
-                className={`px-4 py-2 rounded-full transition-all duration-200 ${
-                  filterRisk === 'overdue'
-                    ? 'bg-amber text-navy font-black shadow-md scale-105'
-                    : 'text-white/80 hover:text-white'
-                }`}
-              >
-                Pending
-              </button>
-              <button
-                onClick={() => setFilterRisk('highrisk')}
-                className={`px-4 py-2 rounded-full transition-all duration-200 ${
-                  filterRisk === 'highrisk'
-                    ? 'bg-signal text-white font-black shadow-md scale-105'
-                    : 'text-white/80 hover:text-white'
-                }`}
-              >
-                High Risk
-              </button>
-            </div>
+          <Link
+            href="/map"
+            className="self-start lg:self-auto inline-flex items-center gap-2 rounded-full bg-amber px-6 py-2.5 text-xs sm:text-sm font-black text-navy-950 shadow-xl hover:bg-amber-300 transition-all duration-200"
+          >
+            Open the map &rarr;
+          </Link>
+        </div>
 
-            {/* Top Right Map CTA */}
-            <button
-              onClick={() => router.push('/map')}
-              className="inline-flex items-center gap-2 rounded-full bg-amber px-6 py-2.5 text-xs sm:text-sm font-black text-navy-950 shadow-xl hover:bg-amber-300 hover:scale-105 transition-all duration-200"
-            >
-              Interactive Map &rarr;
-            </button>
-          </div>
+        {/* Filters */}
+        <div className="relative z-10 mt-6 flex flex-wrap items-center gap-1.5 bg-white/10 p-1.5 rounded-3xl sm:rounded-full border border-white/20 backdrop-blur-md text-xs font-bold w-fit max-w-full">
+          <span className="px-3 text-white/70 text-[11px] font-black uppercase tracking-wider">Show:</span>
+          {FILTERS.map((f) => {
+            const isActive = filterRisk === f.id;
+            const count = data?.counts ? (f.id === 'all' ? data.counts.all : data.counts[f.id]) : undefined;
+            return (
+              <button
+                key={f.id}
+                type="button"
+                onClick={() => changeFilter(f.id)}
+                aria-pressed={isActive}
+                className={`px-3.5 py-2 rounded-full transition-all duration-200 ${
+                  isActive ? `${f.activeClass} font-black shadow-md` : 'text-white/80 hover:text-white'
+                }`}
+              >
+                {f.label}
+                {count !== undefined && <span className="ml-1.5 opacity-70">{count.toLocaleString()}</span>}
+              </button>
+            );
+          })}
         </div>
       </div>
 
-      {/* -- Main Split Dashboard Layout ------------------------------ */}
-      <div className="w-full px-6 sm:px-12 lg:px-16 py-10 max-w-[1800px] mx-auto">
-        <div className="grid grid-cols-1 lg:grid-cols-12 gap-10 items-start">
-
-          {/* -- LEFT COLUMN: Contractor Cards Stream (8 Columns) --------- */}
-          <div className="lg:col-span-8 space-y-6">
-            
-            {/* Control Bar: Search & Sort */}
-            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 bg-white p-5 rounded-3xl shadow-sm border border-gray-100">
+      {/* Main */}
+      <div className="w-full px-4 sm:px-12 lg:px-16 py-10 max-w-[1800px] mx-auto">
+        <div className="grid grid-cols-1 lg:grid-cols-12 gap-8 lg:gap-10 items-start">
+          {/* List */}
+          <div className="lg:col-span-8 space-y-6 min-w-0">
+            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 bg-white p-4 sm:p-5 rounded-3xl shadow-sm border border-gray-100">
               <div className="relative flex-1">
-                <svg className="absolute left-4 top-3.5 h-5 w-5 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <svg className="absolute left-4 top-3.5 h-5 w-5 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden="true">
                   <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" />
                 </svg>
                 <input
-                  type="text"
+                  type="search"
                   value={searchTerm}
                   onChange={(e) => {
                     setSearchTerm(e.target.value);
                     setPage(1);
                   }}
-                  placeholder="Search contractor name or keyword..."
-                  className="w-full rounded-full border border-gray-200 bg-gray-50 py-3 pl-12 pr-4 text-sm font-semibold text-gray-900 placeholder:text-gray-400 focus:border-navy focus:bg-white focus:outline-none focus:ring-2 focus:ring-navy/20 transition-all"
+                  placeholder="Search a contractor name…"
+                  aria-label="Search contractors"
+                  className="w-full rounded-full border border-gray-200 bg-gray-50 py-3 pl-12 pr-4 text-base sm:text-sm font-semibold text-gray-900 placeholder:text-gray-400 focus:border-navy focus:bg-white focus:outline-none focus:ring-2 focus:ring-navy/20 transition-all"
                 />
               </div>
 
-              <div className="flex items-center gap-2 text-xs sm:text-sm font-bold text-gray-600 shrink-0">
-                <span>Sort by:</span>
+              <div className="flex flex-wrap items-center gap-2 text-xs sm:text-sm font-bold text-gray-600 shrink-0">
+                <label htmlFor="contractor-sort">Sort by:</label>
                 <select
+                  id="contractor-sort"
                   value={sortBy}
-                  onChange={(e) => setSortBy(e.target.value as 'totalValuePHP' | 'totalContracts' | 'overdueCount' | 'avgProgress')}
+                  onChange={(e) => {
+                    setSortBy(e.target.value as ContractorSortField);
+                    setPage(1);
+                  }}
                   className="rounded-full border border-gray-200 bg-white px-4 py-2 text-xs sm:text-sm font-extrabold text-navy focus:border-navy focus:ring-1 focus:ring-navy shadow-sm"
                 >
-                  <option value="totalValuePHP">Total Value (₱)</option>
-                  <option value="totalContracts">Award Count</option>
-                  <option value="overdueCount">Overdue Flags</option>
-                  <option value="avgProgress">Avg Progress (%)</option>
+                  {SORT_OPTIONS.map((o) => (
+                    <option key={o.value} value={o.value}>
+                      {o.label}
+                    </option>
+                  ))}
                 </select>
-
                 <button
-                  onClick={() => setSortOrder((o) => (o === 'desc' ? 'asc' : 'desc'))}
+                  type="button"
+                  onClick={() => {
+                    setSortOrder((o) => (o === 'desc' ? 'asc' : 'desc'));
+                    setPage(1);
+                  }}
                   className="rounded-full border border-gray-200 bg-gray-50 px-4 py-2 text-xs sm:text-sm font-bold text-navy hover:bg-navy hover:text-white transition shadow-sm"
                 >
-                  {sortOrder === 'desc' ? '↓ High to Low' : '↑ Low to High'}
+                  {sortOrder === 'desc' ? '↓ Highest first' : '↑ Lowest first'}
                 </button>
               </div>
             </div>
 
-            {/* Contractor Leaderboard Stream */}
             <div className="space-y-4">
-              <div className="flex items-center justify-between">
-                <h2 className="text-xl font-black text-navy tracking-tight">
-                  Contractor Leaderboard ({contractorsList.length} Entities)
-                </h2>
-              </div>
-
-                {isTableLoading ? (
-                  Array.from({ length: 5 }).map((_, i) => (
-                    <div key={i} className="animate-pulse rounded-3xl bg-white p-7 shadow-sm border border-gray-100 space-y-3">
-                      <div className="h-5 bg-gray-200 rounded w-1/3" />
-                      <div className="h-4 bg-gray-200 rounded w-2/3" />
-                    </div>
-                  ))
-                ) : contractorsList.length > 0 ? (
-                  contractorsList.map((c, idx) => {
-                    const rank = (page - 1) * 12 + idx + 1;
-                    const isTop3 = rank <= 3;
-                    const isHighRisk = c.overdueCount > 3 || c.terminatedCount > 0;
-                    const isPending = c.overdueCount > 0 && c.overdueCount <= 3;
-                    const isSelected = activeContractor?.id === c.id || activeContractor?.label === c.name;
-                    const progressPct = Math.min(Math.max(c.avgProgress || 0, 0), 100);
-
-                    // Status Bar Accent Color
-                    const accentBg = isHighRisk 
-                      ? 'bg-signal' 
-                      : isPending 
-                      ? 'bg-amber' 
-                      : 'bg-blue-600';
-
-                    return (
-                      <div
-                        key={c.id}
-                        onClick={() => setSelectedContractor({
-                          id: c.id,
-                          label: c.name,
-                          totalValue: c.totalValuePHP,
-                          totalContracts: c.totalContracts,
-                          avgProgress: c.avgProgress,
-                          overdueCount: c.overdueCount,
-                          terminatedCount: c.terminatedCount,
-                        })}
-                        className={`group relative overflow-hidden rounded-3xl bg-white p-5 sm:p-6 shadow-sm hover:shadow-xl hover:-translate-y-0.5 transition-all duration-300 border cursor-pointer ${
-                          isSelected ? 'border-navy ring-2 ring-navy/20 bg-blue-50/20 shadow-md' : 'border-gray-200/80 hover:border-navy/40'
-                        }`}
-                      >
-                        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-5">
-                          
-                          {/* Internal Status Accent Bar + Col 1: Award Value & Rank Box */}
-                          <div className="flex items-center gap-4 shrink-0">
-                            {/* Sleek rounded status accent bar */}
-                            <div className={`w-2 h-16 rounded-full shrink-0 ${accentBg} shadow-sm`} />
-
-                            {/* Rank & Award Value Card Box */}
-                            <div className="bg-slate-50/90 border border-slate-100 rounded-2xl p-4 sm:w-48 text-left shadow-xs">
-                              <div className="flex items-center gap-2 mb-1">
-                                {isTop3 ? (
-                                  <span className="inline-flex items-center justify-center rounded-full bg-gradient-to-r from-amber to-amber-400 text-navy font-black text-xs px-3 py-0.5 shadow-xs">
-                                    Rank #{rank}
-                                  </span>
-                                ) : (
-                                  <span className="inline-flex items-center justify-center rounded-full bg-navy/10 text-navy font-black text-xs px-3 py-0.5">
-                                    Rank #{rank}
-                                  </span>
-                                )}
-                              </div>
-                              <div className="text-xl sm:text-2xl font-black text-navy tracking-tight">
-                                {formatCurrency(c.totalValuePHP)}
-                              </div>
-                              <div className="text-xs font-bold text-gray-500 mt-0.5">
-                                {c.totalContracts.toLocaleString()} Award Contracts
-                              </div>
-                            </div>
-                          </div>
-
-                          {/* Col 2: Avatar & Contractor Entity Name */}
-                          <div className="flex items-start sm:items-center gap-4 flex-1 min-w-0">
-                            <div className="h-14 w-14 shrink-0 rounded-2xl bg-gradient-to-br from-navy to-navy-950 text-white font-black flex items-center justify-center text-lg shadow-md border-2 border-white">
-                              {c.name.substring(0, 2).toUpperCase()}
-                            </div>
-                            <div className="min-w-0 flex-1 space-y-1.5">
-                              <h3 className="text-base sm:text-lg lg:text-xl font-black text-gray-900 group-hover:text-navy transition line-clamp-2 leading-snug">
-                                {c.name}
-                              </h3>
-
-                              {/* Progress bar + percentage */}
-                              <div className="space-y-1 max-w-sm pt-0.5">
-                                <div className="flex items-center justify-between text-xs font-extrabold">
-                                  <span className="text-gray-500">Avg Completion Rate</span>
-                                  <span className="text-blue-600 font-black">{progressPct.toFixed(1)}%</span>
-                                </div>
-                                <div className="h-2 w-full rounded-full bg-gray-100 overflow-hidden">
-                                  <div
-                                    className="h-2 rounded-full transition-all duration-500"
-                                    style={{
-                                      width: `${progressPct}%`,
-                                      backgroundColor: progressPct >= 90 ? '#10b981' : progressPct >= 50 ? '#3b82f6' : '#f59e0b',
-                                    }}
-                                  />
-                                </div>
-                              </div>
-                            </div>
-                          </div>
-
-                          {/* Col 3: Status Badge Pill & Audit Button */}
-                          <div className="shrink-0 flex items-center justify-between sm:justify-end gap-3.5 pt-2 sm:pt-0">
-                            {c.overdueCount > 0 ? (
-                              <span className={`inline-flex items-center gap-2 rounded-full px-4 py-2 text-xs sm:text-sm font-black shadow-xs ${
-                                isHighRisk 
-                                  ? 'bg-red-50 text-signal border border-red-200/80' 
-                                  : 'bg-amber-50 text-[#b45309] border border-amber/60'
-                              }`}>
-                                <span className={`h-2.5 w-2.5 rounded-full animate-pulse ${isHighRisk ? 'bg-signal' : 'bg-amber'}`} />
-                                {c.overdueCount} Overdue
-                              </span>
-                            ) : (
-                              <span className="inline-flex items-center gap-2 rounded-full bg-emerald-50 text-emerald-800 border border-emerald-200/80 px-4 py-2 text-xs sm:text-sm font-black shadow-xs">
-                                <span className="h-2.5 w-2.5 rounded-full bg-emerald-500" />
-                                Confirmed Clean
-                              </span>
-                            )}
-
-                            {/* View Projects CTA Pill */}
-                            <button
-                              onClick={(e) => {
-                                e.stopPropagation();
-                                setActiveDrawerContractor({ name: c.name, id: c.id });
-                              }}
-                              className="rounded-full bg-navy px-6 py-2.5 text-xs sm:text-sm font-black text-white shadow-md hover:bg-amber hover:text-navy hover:scale-105 transition-all duration-200 whitespace-nowrap"
-                            >
-                              View Projects &rarr;
-                            </button>
-                          </div>
-                        </div>
-                      </div>
-                    );
-                  })
-                ) : (
-                  <div className="rounded-3xl bg-white p-12 text-center text-gray-500 font-semibold shadow-sm border border-gray-100">
-                    No contractors found matching &ldquo;{searchTerm}&rdquo;.
-                  </div>
+              <h2 className="text-xl font-black text-navy tracking-tight flex items-center gap-3">
+                Contractors
+                <span className="text-sm font-bold text-gray-500">{total.toLocaleString()} found</span>
+                {isFetching && !isLoading && (
+                  <span className="text-xs font-semibold text-gray-400" aria-live="polite">
+                    Updating…
+                  </span>
                 )}
+              </h2>
 
-                {/* Pagination */}
-                {totalPages > 1 && (
-                  <div className="flex items-center justify-between border-t border-gray-200 pt-6">
-                    <p className="text-xs sm:text-sm text-gray-600 font-semibold">
-                      Page <span className="font-extrabold text-navy">{page}</span> of <span className="font-extrabold text-navy">{totalPages}</span>
-                    </p>
-                    <div className="flex items-center gap-2">
-                      <button
-                        disabled={page <= 1}
-                        onClick={() => setPage((p) => Math.max(p - 1, 1))}
-                        className="rounded-full border border-gray-300 bg-white px-5 py-2 text-xs sm:text-sm font-bold text-navy hover:bg-gray-50 disabled:opacity-50 transition shadow-sm"
-                      >
-                        &larr; Previous
-                      </button>
-                      <button
-                        disabled={page >= totalPages}
-                        onClick={() => setPage((p) => Math.min(p + 1, totalPages))}
-                        className="rounded-full border border-gray-300 bg-white px-5 py-2 text-xs sm:text-sm font-bold text-navy hover:bg-gray-50 disabled:opacity-50 transition shadow-sm"
-                      >
-                        Next &rarr;
-                      </button>
-                    </div>
+              {isLoading ? (
+                Array.from({ length: 5 }).map((_, i) => (
+                  <div key={i} className="animate-pulse rounded-3xl bg-white p-7 shadow-sm border border-gray-100 space-y-3">
+                    <div className="h-5 bg-gray-200 rounded w-1/3" />
+                    <div className="h-4 bg-gray-200 rounded w-2/3" />
                   </div>
-                )}
-              </div>
-          </div>
-
-          {/* -- RIGHT COLUMN: Klatschboard Sticky Details Panel (4 Columns) - */}
-          <div className="lg:col-span-4 sticky top-24 space-y-6">
-            
-            {/* Top Metrics Cards Header */}
-            <div className="rounded-3xl bg-white p-7 shadow-md border border-gray-100 space-y-6">
-              
-              <div className="flex items-center justify-between border-b border-gray-100 pb-4">
-                <span className="text-xs font-black uppercase tracking-wider text-gray-400">National Registry Summary</span>
-                <span className="text-xs font-black text-navy">Overview</span>
-              </div>
-
-              {/* 3 Metric Badges Row */}
-              <div className="grid grid-cols-3 gap-3 text-center">
-                
-                {/* Clean Badge */}
-                <div className="p-3.5 rounded-2xl bg-emerald-50 border border-emerald-100 flex flex-col items-center">
-                  <div className="h-2 w-2 rounded-full bg-emerald-500 mb-2" />
-                  <span className="text-base sm:text-lg font-black text-emerald-900">{summaryStats.clean.toLocaleString()}</span>
-                  <span className="text-xs font-bold text-emerald-700 mt-0.5 uppercase tracking-wider text-[10px]">Clean</span>
-                </div>
-
-                {/* Overdue Badge */}
-                <div className="p-3.5 rounded-2xl bg-amber-50 border border-amber-100 flex flex-col items-center">
-                  <div className="h-2 w-2 rounded-full bg-amber mb-2" />
-                  <span className="text-base sm:text-lg font-black text-amber-900">{summaryStats.overdue.toLocaleString()}</span>
-                  <span className="text-xs font-bold text-amber-700 mt-0.5 uppercase tracking-wider text-[10px]">Overdue</span>
-                </div>
-
-                {/* Terminated Badge */}
-                <div className="p-3.5 rounded-2xl bg-red-50 border border-red-100 flex flex-col items-center">
-                  <div className="h-2 w-2 rounded-full bg-signal mb-2" />
-                  <span className="text-base sm:text-lg font-black text-red-900">{summaryStats.terminated.toLocaleString()}</span>
-                  <span className="text-xs font-bold text-red-700 mt-0.5 uppercase tracking-wider text-[10px]">Terminated</span>
-                </div>
-              </div>
-
-              {/* Selected Contractor Detailed Card */}
-              {activeContractor ? (
-                <div className="pt-4 border-t border-gray-100 space-y-5">
-                  <div className="text-center">
-                    <span className="text-xs font-black uppercase tracking-wider text-amber bg-navy-950 px-4 py-1.5 rounded-full border border-navy">
-                      Contractor Inspector
-                    </span>
-
-                    {/* Entity Avatar */}
-                    <div className="mx-auto mt-5 h-20 w-20 rounded-2xl bg-navy text-white font-black text-2xl flex items-center justify-center shadow-lg border-2 border-white">
-                      {activeContractor.label.substring(0, 2).toUpperCase()}
-                    </div>
-
-                    <h3 className="mt-4 text-base sm:text-lg font-black text-navy leading-snug">
-                      {activeContractor.label}
-                    </h3>
-                    <p className="text-xs font-semibold text-gray-500 mt-1">
-                      Registered DPWH Public Works Contractor
-                    </p>
-                  </div>
-
-                  {/* Details List */}
-                  <div className="space-y-3 pt-2 text-xs sm:text-sm font-medium">
-                    <div className="flex justify-between items-center py-2 border-b border-gray-50">
-                      <span className="text-gray-500 font-bold">Cumulative Award Value</span>
-                      <span className="font-black text-navy text-sm sm:text-base">{formatCurrency(activeContractor.totalValue)}</span>
-                    </div>
-                    <div className="flex justify-between items-center py-2 border-b border-gray-50">
-                      <span className="text-gray-500 font-bold">Total Award Contracts</span>
-                      <span className="font-extrabold text-gray-900 text-sm sm:text-base">{activeContractor.totalContracts}</span>
-                    </div>
-                    <div className="flex justify-between items-center py-2 border-b border-gray-50">
-                      <span className="text-gray-500 font-bold">Avg Completion Rate</span>
-                      <span className="font-extrabold text-blue-600 text-sm sm:text-base">{typeof activeContractor.avgProgress === 'number' ? activeContractor.avgProgress.toFixed(1) : 0}%</span>
-                    </div>
-                    <div className="flex justify-between items-center py-2 border-b border-gray-50">
-                      <span className="text-gray-500 font-bold">Overdue / Delayed Flags</span>
-                      <span className={`font-extrabold ${activeContractor.overdueCount > 0 ? 'text-red-600' : 'text-emerald-600'}`}>
-                        {activeContractor.overdueCount > 0 ? `${activeContractor.overdueCount} Overdue` : '0 (Clean)'}
-                      </span>
-                    </div>
-                  </div>
-
-                  {/* Full Projects Button */}
+                ))
+              ) : isError ? (
+                <div className="rounded-3xl bg-white p-10 text-center shadow-sm border border-gray-100 space-y-3">
+                  <p className="text-gray-600 font-semibold">We couldn&rsquo;t load contractors right now.</p>
                   <button
-                    onClick={() => setActiveDrawerContractor({ name: activeContractor.label, id: activeContractor.id })}
-                    className="w-full mt-4 rounded-full bg-navy py-3.5 text-center text-xs sm:text-sm font-black text-white shadow-xl hover:bg-amber hover:text-navy hover:scale-105 transition-all duration-200"
+                    type="button"
+                    onClick={() => refetch()}
+                    className="rounded-full bg-navy px-5 py-2 text-xs font-black text-white hover:bg-amber hover:text-navy transition"
                   >
-                    View All Won Projects &rarr;
+                    Try again
                   </button>
                 </div>
+              ) : contractors.length > 0 ? (
+                contractors.map((c, idx) => (
+                  <ContractorCard
+                    key={c.id}
+                    contractor={c}
+                    rank={(page - 1) * PAGE_SIZE + idx + 1}
+                    isSelected={selected?.id === c.id}
+                    onSelect={() => setSelectedId(c.id)}
+                    onViewProjects={() => setDrawerContractor(c.name)}
+                  />
+                ))
               ) : (
-                <div className="py-8 text-center text-xs text-gray-400 font-semibold">
-                  Click any contractor card to inspect details.
+                <div className="rounded-3xl bg-white p-12 text-center text-gray-500 font-semibold shadow-sm border border-gray-100">
+                  {debouncedSearch
+                    ? <>No contractors match &ldquo;{debouncedSearch}&rdquo;.</>
+                    : 'No contractors in this group.'}
                 </div>
+              )}
+
+              {totalPages > 1 && (
+                <nav className="flex items-center justify-between border-t border-gray-200 pt-6" aria-label="Pages">
+                  <p className="text-xs sm:text-sm text-gray-600 font-semibold">
+                    Page <span className="font-extrabold text-navy">{page}</span> of{' '}
+                    <span className="font-extrabold text-navy">{totalPages.toLocaleString()}</span>
+                  </p>
+                  <div className="flex items-center gap-2">
+                    <button
+                      type="button"
+                      disabled={page <= 1}
+                      onClick={() => setPage((p) => Math.max(p - 1, 1))}
+                      className="rounded-full border border-gray-300 bg-white px-5 py-2 text-xs sm:text-sm font-bold text-navy hover:bg-gray-50 disabled:opacity-50 transition shadow-sm"
+                    >
+                      &larr; Previous
+                    </button>
+                    <button
+                      type="button"
+                      disabled={page >= totalPages}
+                      onClick={() => setPage((p) => Math.min(p + 1, totalPages))}
+                      className="rounded-full border border-gray-300 bg-white px-5 py-2 text-xs sm:text-sm font-bold text-navy hover:bg-gray-50 disabled:opacity-50 transition shadow-sm"
+                    >
+                      Next &rarr;
+                    </button>
+                  </div>
+                </nav>
               )}
             </div>
           </div>
 
+          {/* Details */}
+          <div className="lg:col-span-4 lg:sticky lg:top-24 space-y-6">
+            <ContractorDetails
+              contractor={selected}
+              counts={data?.counts ?? null}
+              isSearching={!!debouncedSearch}
+              onViewProjects={(c) => setDrawerContractor(c.name)}
+            />
+          </div>
         </div>
       </div>
 
-      {/* -- Slide-Over Won Projects Drawer ------------------------------ */}
-      {activeDrawerContractor && (
-        <div
-          className="fixed inset-0 z-50 overflow-hidden"
-          aria-labelledby="slide-over-title"
-          role="dialog"
-          aria-modal="true"
-        >
-          {/* Backdrop overlay */}
-          <div
-            className="fixed inset-0 bg-navy-950/60 backdrop-blur-xs transition-opacity duration-300"
-            onClick={() => setActiveDrawerContractor(null)}
-            aria-hidden="true"
-          />
-
-          <div className="fixed inset-y-0 right-0 max-w-full flex pl-6 sm:pl-10 z-50">
-            <div className="w-full max-w-xl bg-white h-full shadow-2xl z-50 flex flex-col border-l border-gray-200 animate-in slide-in-from-right duration-300">
-              
-              {/* Drawer Header */}
-              <div className="bg-navy-950 text-white p-6 border-b border-navy/40 flex items-start justify-between gap-4 shrink-0">
-                <div className="space-y-1.5 flex-1 min-w-0">
-                  <div className="inline-flex items-center gap-2 rounded-full bg-white/10 px-3 py-1 text-[11px] font-black text-amber border border-white/15">
-                    <span className="h-1.5 w-1.5 rounded-full bg-amber" />
-                    WON PROJECTS DOSSIER
-                  </div>
-                  <h2 id="slide-over-title" className="text-xl sm:text-2xl font-black tracking-tight text-white line-clamp-2 leading-snug">
-                    {activeDrawerContractor.name}
-                  </h2>
-                  <div className="flex items-center gap-2 text-xs font-semibold text-white/80">
-                    {isDrawerLoading ? (
-                      <span>Loading won contracts...</span>
-                    ) : (
-                      <span className="inline-flex items-center gap-1.5">
-                        <span className="font-bold text-amber">{drawerProjects.length}</span>
-                        <span>Won Contract{drawerProjects.length === 1 ? '' : 's'}</span>
-                      </span>
-                    )}
-                  </div>
-                </div>
-
-                <button
-                  type="button"
-                  onClick={() => setActiveDrawerContractor(null)}
-                  className="rounded-full p-2 bg-white/10 hover:bg-white/20 text-white transition-colors shrink-0 focus:outline-none focus:ring-2 focus:ring-amber"
-                  aria-label="Close drawer"
-                >
-                  <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.5} d="M6 18L18 6M6 6l12 12" />
-                  </svg>
-                </button>
-              </div>
-
-              {/* Drawer Body - Scrollable list of won contracts */}
-              <div className="flex-1 overflow-y-auto p-6 space-y-4 bg-[#f8fafd]">
-                {isDrawerLoading ? (
-                  <div className="space-y-4">
-                    {Array.from({ length: 4 }).map((_, i) => (
-                      <div key={i} className="animate-pulse rounded-2xl bg-white p-5 border border-gray-200/80 shadow-xs space-y-3">
-                        <div className="h-4 bg-gray-200 rounded w-3/4" />
-                        <div className="h-3 bg-gray-200 rounded w-1/3" />
-                        <div className="h-3 bg-gray-200 rounded w-1/2" />
-                      </div>
-                    ))}
-                  </div>
-                ) : drawerProjects.length === 0 ? (
-                  <div className="rounded-2xl bg-white p-8 text-center text-gray-500 font-semibold border border-gray-200">
-                    No won projects found for this contractor.
-                  </div>
-                ) : (
-                  drawerProjects.map((project: any) => {
-                    const progressPct = Math.min(Math.max(project.progress || 0, 0), 100);
-                    const locationParts = [
-                      project.province?.name,
-                      project.province?.region?.name,
-                    ].filter(Boolean);
-                    const locationStr = locationParts.length > 0 ? locationParts.join(', ') : (project.location || 'Location Not Specified');
-
-                    return (
-                      <div
-                        key={project.id}
-                        onClick={() => router.push(`/projects/${encodeURIComponent(project.id)}`)}
-                        className="group cursor-pointer rounded-2xl bg-white p-5 border border-gray-200/90 shadow-xs hover:border-navy hover:shadow-lg transition-all duration-200 flex flex-col gap-3"
-                      >
-                        {/* Project Name and ID */}
-                        <div className="space-y-1">
-                          <h3 className="font-bold text-sm text-navy group-hover:text-blue-700 transition leading-snug">
-                            {project.name}
-                          </h3>
-                          <div className="font-mono text-xs text-gray-500">
-                            Contract ID: {project.id}
-                          </div>
-                        </div>
-
-                        {/* Location */}
-                        <div className="flex items-center gap-1.5 text-xs text-gray-600 font-medium">
-                          <svg className="w-3.5 h-3.5 text-gray-400 shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M17.657 16.657L13.414 20.9a1.998 1.998 0 01-2.827 0l-4.244-4.243a8 8 0 1111.314 0z" />
-                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 11a3 3 0 11-6 0 3 3 0 016 0z" />
-                          </svg>
-                          <span className="truncate">{locationStr}</span>
-                        </div>
-
-                        {/* Approved Budget */}
-                        <div className="flex items-center justify-between text-xs pt-1 border-t border-gray-100">
-                          <span className="text-gray-500 font-semibold">Approved Budget</span>
-                          <span className="font-black text-navy-950 text-sm">
-                            {formatCurrency(project.budgetPHP ?? project.budget ?? 0)}
-                          </span>
-                        </div>
-
-                        {/* Physical Progress */}
-                        <div className="space-y-1">
-                          <div className="flex items-center justify-between text-xs font-bold">
-                            <span className="text-gray-500">Physical Progress</span>
-                            <span className="text-navy font-black">{progressPct.toFixed(1)}%</span>
-                          </div>
-                          <div className="h-2 w-full rounded-full bg-gray-100 overflow-hidden">
-                            <div
-                              className="h-2 rounded-full transition-all duration-300"
-                              style={{
-                                width: `${progressPct}%`,
-                                backgroundColor: progressPct >= 90 ? '#10b981' : progressPct >= 50 ? '#01367d' : '#ffb241',
-                              }}
-                            />
-                          </div>
-                        </div>
-
-                        {/* Direct Dossier Routing CTA */}
-                        <div className="flex items-center justify-end pt-1 text-xs font-bold text-navy group-hover:text-amber-ink transition-colors">
-                          View Project Dossier &rarr;
-                        </div>
-                      </div>
-                    );
-                  })
-                )}
-              </div>
-
-              {/* Drawer Footer */}
-              <div className="p-4 bg-gray-50 border-t border-gray-200">
-                <button
-                  type="button"
-                  onClick={() => setActiveDrawerContractor(null)}
-                  className="w-full py-2.5 px-4 rounded-full border border-gray-300 bg-white text-xs font-bold text-gray-700 hover:bg-gray-100 transition shadow-xs"
-                >
-                  Close Drawer
-                </button>
-              </div>
-
-            </div>
-          </div>
-        </div>
-      )}
+      <AnimatePresence>
+        {drawerContractor && (
+          <ContractorProjectsDrawer key={drawerContractor} contractorName={drawerContractor} onClose={closeDrawer} />
+        )}
+      </AnimatePresence>
       <SiteFooter className="mt-16" />
     </div>
+  );
+}
+
+export default function ContractorsPage() {
+  return (
+    <Suspense fallback={<div className="min-h-screen bg-canvas" />}>
+      <ContractorsContent />
+    </Suspense>
   );
 }

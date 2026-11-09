@@ -166,6 +166,40 @@
   font-variant-numeric: tabular-nums;
 }
 
+/* Pressable feedback: instant on pointer-down, snappy release. */
+@utility press {
+  transition: transform 160ms var(--ease-out-quart);
+  &:active {
+    transform: scale(0.97);
+  }
+}
+
+/* Loading placeholder sweep (CSS, so it stays smooth while JS is busy). */
+.shimmer {
+  position: relative;
+  overflow: hidden;
+  background: var(--color-sunken);
+}
+.shimmer::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  transform: translateX(-100%);
+  background: linear-gradient(90deg, transparent, rgb(255 255 255 / 0.65), transparent);
+  animation: shimmer-sweep 1.4s linear infinite;
+}
+.shimmer-dark {
+  background: rgb(255 255 255 / 0.08);
+}
+.shimmer-dark::after {
+  background: linear-gradient(90deg, transparent, rgb(255 255 255 / 0.12), transparent);
+}
+@keyframes shimmer-sweep {
+  to {
+    transform: translateX(100%);
+  }
+}
+
 @media (prefers-reduced-motion: reduce) {
   *,
   *::before,

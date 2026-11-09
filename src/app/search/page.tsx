@@ -5,7 +5,7 @@ import { useSearchParams, useRouter } from 'next/navigation';
 import Link from 'next/link';
 import { useProjects, useContractors, type ProjectWithRelations, type ContractorItem } from '@/hooks/use-projects';
 import { formatCurrency, cleanContractorName } from '@/lib/format';
-import { STATUS_COLORS, FLAG_COLORS, PROJECT_CATEGORIES } from '@/lib/constants';
+import { STATUS_COLORS, FLAG_COLORS, FLAG_LABELS, PROJECT_CATEGORIES } from '@/lib/constants';
 
 const SUGGESTED_QUERIES = [
   'Bridges in Cebu',
@@ -275,12 +275,12 @@ function SearchContent() {
                 }}
                 className="rounded-md border border-gray-300 bg-white px-2.5 py-1 text-xs text-gray-700 focus:border-blue-500 focus:ring-1 focus:ring-blue-500"
               >
-                <option value="All">All Anomaly Flags</option>
-                <option value="stalled">Stalled</option>
-                <option value="neverStarted">Never Started</option>
-                <option value="overdue">Overdue</option>
-                <option value="overpaid">Overpaid</option>
-                <option value="paymentPending">Payment Pending</option>
+                <option value="All">All warning signs</option>
+                <option value="stalled">No recent progress</option>
+                <option value="neverStarted">Hasn&rsquo;t started</option>
+                <option value="overdue">Past deadline</option>
+                <option value="overpaid">Paid but little work done</option>
+                <option value="paymentPending">Payment not yet released</option>
               </select>
 
               {/* Sort Filter */}
@@ -297,8 +297,8 @@ function SearchContent() {
                 >
                   <option value="budgetPHP-desc">Budget: High to Low</option>
                   <option value="budgetPHP-asc">Budget: Low to High</option>
-                  <option value="progress-desc">Progress: High to Low</option>
-                  <option value="progress-asc">Progress: Low to High</option>
+                  <option value="progress-desc">Work done: High to Low</option>
+                  <option value="progress-asc">Work done: Low to High</option>
                   <option value="startDate-desc">Start Date: Newest</option>
                   <option value="startDate-asc">Start Date: Oldest</option>
                 </select>
@@ -347,7 +347,7 @@ function SearchContent() {
             Search Philippine Infrastructure Database
           </h2>
           <p className="mt-2 text-sm text-gray-500 max-w-lg mx-auto">
-            Find and analyze DPWH projects, check contractor track records, investigate stalled contracts, and track public fund disbursements.
+            Look up DPWH projects near you, see who built them, and check whether the money paid matches the work done.
           </p>
 
           <div className="mt-8 grid grid-cols-1 sm:grid-cols-3 gap-4 max-w-3xl mx-auto text-left">
@@ -401,10 +401,10 @@ function SearchContent() {
               Search Tips:
             </h3>
             <ul className="space-y-1.5 text-xs text-gray-600 list-disc list-inside">
-              <li>Check the spelling of project names or contractor entities</li>
+              <li>Check the spelling of project names or contractor names</li>
               <li>Try more general keywords (e.g. &ldquo;Bridge&rdquo;, &ldquo;Drainage&rdquo;, &ldquo;Bacolod&rdquo;)</li>
               <li>Reset category or status filters to broaden your search</li>
-              <li>Search using DPWH Contract ID or standard contractor keywords</li>
+              <li>Search using the DPWH contract ID or part of the contractor name</li>
             </ul>
           </div>
 
@@ -468,14 +468,14 @@ function SearchContent() {
                     </div>
 
                     <div className="mt-3 flex items-center justify-between text-xs">
-                      <span className="text-gray-500">Total Portfolio Value:</span>
+                      <span className="text-gray-500">Total value of projects:</span>
                       <span className="font-bold text-gray-900">
                         {formatCurrency(c.totalValuePHP)}
                       </span>
                     </div>
 
                     <div className="mt-2 flex items-center justify-between text-xs">
-                      <span className="text-gray-500">Avg Completion:</span>
+                      <span className="text-gray-500">Average work done:</span>
                       <span className="font-semibold text-gray-800">
                         {typeof c.avgProgress === 'number' ? c.avgProgress.toFixed(1) : 0}%
                       </span>
@@ -485,16 +485,16 @@ function SearchContent() {
                     <div className="mt-3 pt-3 border-t border-gray-100 flex flex-wrap gap-1.5 text-xs">
                       {c.overdueCount > 0 && (
                         <span className="rounded-full bg-red-50 border border-red-200 px-2 py-0.5 text-red-700 font-medium">
-                          {c.overdueCount} Overdue
+                          {c.overdueCount} late
                         </span>
                       )}
                       {c.terminatedCount > 0 && (
                         <span className="rounded-full bg-amber-50 border border-amber-200 px-2 py-0.5 text-amber-700 font-medium">
-                          {c.terminatedCount} Terminated
+                          {c.terminatedCount} cancelled
                         </span>
                       )}
                       {c.overdueCount === 0 && c.terminatedCount === 0 && (
-                        <span className="text-gray-400">Clean track record</span>
+                        <span className="text-gray-400">No delays on record</span>
                       )}
                     </div>
                   </div>
@@ -534,7 +534,7 @@ function SearchContent() {
             <div className="space-y-4">
               <div className="flex items-center justify-between">
                 <div className="flex items-center gap-2">
-                  <h2 className="text-lg font-bold text-gray-900">Infrastructure Projects</h2>
+                  <h2 className="text-lg font-bold text-gray-900">Projects</h2>
                   <span className="rounded-full bg-blue-100 px-2 py-0.5 text-xs font-bold text-blue-800">
                     {totalProjects}
                   </span>
@@ -595,7 +595,7 @@ function SearchContent() {
                         {/* Progress Bar */}
                         <div className="mt-3">
                           <div className="flex items-center justify-between text-xs text-gray-500 mb-1">
-                            <span>Progress</span>
+                            <span>Work done</span>
                             <span className="font-semibold text-gray-800">
                               {typeof project.progress === 'number' ? project.progress.toFixed(1) : 0}%
                             </span>
@@ -609,7 +609,7 @@ function SearchContent() {
                         </div>
                       </div>
 
-                      {/* Anomaly flags & Live badge */}
+                      {/* Warning signs & live badge */}
                       <div className="mt-3 pt-3 border-t border-gray-100 flex flex-wrap items-center gap-1">
                         {flags.map((flag) => (
                           <span
@@ -618,11 +618,11 @@ function SearchContent() {
                               FLAG_COLORS[flag] ?? 'bg-gray-100 text-gray-700 border-gray-200'
                             }`}
                           >
-                            {flag}
+                            {FLAG_LABELS[flag] ?? flag}
                           </span>
                         ))}
                         {flags.length === 0 && (
-                          <span className="text-xs text-gray-400">No anomaly flags</span>
+                          <span className="text-xs text-gray-400">No warning signs</span>
                         )}
                       </div>
                     </Link>

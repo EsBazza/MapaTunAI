@@ -11,16 +11,20 @@ const publicSans = Public_Sans({
   display: 'swap',
 });
 
+// Only body text is needed on every page, so only Public Sans is preloaded.
+// Archivo (headings) and JetBrains Mono (labels) load when a page uses them.
 const archivo = Archivo({
   subsets: ['latin'],
   variable: '--font-archivo',
   display: 'swap',
+  preload: false,
 });
 
 const jetbrainsMono = JetBrains_Mono({
   subsets: ['latin'],
   variable: '--font-jetbrains-mono',
   display: 'swap',
+  preload: false,
 });
 
 export const metadata: Metadata = {
