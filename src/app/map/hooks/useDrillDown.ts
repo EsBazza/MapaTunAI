@@ -1,215 +1,84 @@
 'use client';
 
 import { useState, useCallback } from 'react';
-import type { Centroids } from './useLocationHierarchy';
+import type { LngLatBounds } from '@/lib/geo-bounds';
 
 export interface DrillDownState {
   region: string;
   province: string;
   municipality: string;
-  cityFile?: string;
+  cityFile: string;
   barangay: string;
-  filterAnomaly: string;
+  /** Bounds that came with the barangay list (fallback when no polygon) */
+  barangayBounds: LngLatBounds | null;
+  /** Bumps on every user choice so the camera re-fits even to the same place */
+  focusSeq: number;
 }
 
-export function useDrillDown(
-  centroids: Centroids | null,
-  flyTo: (center: [number, number], zoom: number) => void,
-  fitBounds: (bounds: [[number, number], [number, number]]) => void,
-) {
-  const [state, setState] = useState<DrillDownState>({
-    region: '',
-    province: '',
-    municipality: '',
-    cityFile: '',
-    barangay: '',
-    filterAnomaly: 'All',
-  });
+const EMPTY: DrillDownState = {
+  region: '',
+  province: '',
+  municipality: '',
+  cityFile: '',
+  barangay: '',
+  barangayBounds: null,
+  focusSeq: 0,
+};
 
-  const setRegion = useCallback(
-    (region: string) => {
-      setState({
-        region,
-        province: '',
-        municipality: '',
-        cityFile: '',
-        barangay: '',
-        filterAnomaly: state.filterAnomaly,
-      });
+/**
+ * Holds the Region → Province → City → Barangay selection.
+ * It does not move the camera: the map page fits the camera to the resolved
+ * border of whatever is selected, so the view and the outline always match.
+ */
+export function useDrillDown() {
+  const [state, setState] = useState<DrillDownState>(EMPTY);
 
-      if (!region) {
-        // Reset to nationwide view
-        flyTo([122.0, 12.8], 5.8);
-        return;
-      }
-
-      if (centroids?.regions) {
-        const c =
-          centroids.regions[region] ||
-          centroids.regions[region.toLowerCase().trim()];
-        if (c?.bounds) {
-          fitBounds(c.bounds);
-          return;
-        }
-      }
-
-      // Fallback default
-      flyTo([122.0, 12.8], 6.5);
-    },
-    [centroids, flyTo, fitBounds, state.filterAnomaly],
-  );
-
-  const setProvince = useCallback(
-    (province: string) => {
-      setState((prev) => ({ ...prev, province, municipality: '', cityFile: '', barangay: '' }));
-      if (!province) return;
-
-      if (centroids?.provinces) {
-        const c =
-          centroids.provinces[province] ||
-          centroids.provinces[province.toLowerCase().trim()] ||
-          centroids.provinces[`${state.region}::${province}`];
-        if (c?.bounds) {
-          fitBounds(c.bounds);
-          return;
-        }
-      }
-
-      // Fallback: look up a project in this province
-      fetch(`/api/projects?limit=1&province=${encodeURIComponent(province)}`)
-        .then((res) => (res.ok ? res.json() : null))
-        .then((data) => {
-          const p = data?.projects?.[0];
-          if (p?.gpsLng && p?.gpsLat) {
-            flyTo([p.gpsLng, p.gpsLat], 9.5);
-          }
-        })
-        .catch(console.error);
-    },
-    [centroids, fitBounds, flyTo, state.region],
-  );
-
-  const setMunicipality = useCallback(
-    (municipality: string, cityFile?: string) => {
-      setState((prev) => ({ ...prev, municipality, cityFile: cityFile || '', barangay: '' }));
-      if (!municipality) return;
-
-      if (centroids?.cities) {
-        const c =
-          (cityFile ? centroids.cities[cityFile] : null) ||
-          (state.province ? centroids.cities[`${state.province}::${municipality}`] : null) ||
-          (state.province ? centroids.cities[`${state.province}::${municipality.toLowerCase().trim()}`] : null) ||
-          centroids.cities[municipality] ||
-          centroids.cities[municipality.toLowerCase().trim()];
-        if (c?.bounds) {
-          fitBounds(c.bounds);
-          return;
-        }
-      }
-
-      // Fallback: fly to city location via project GPS lookup
-      fetch(
-        `/api/projects?limit=1&province=${encodeURIComponent(state.province || '')}&search=${encodeURIComponent(municipality)}`,
-      )
-        .then((res) => (res.ok ? res.json() : null))
-        .then((data) => {
-          const p = data?.projects?.[0];
-          if (p?.gpsLng && p?.gpsLat) {
-            flyTo([p.gpsLng, p.gpsLat], 12.0);
-          }
-        })
-        .catch(console.error);
-    },
-    [centroids, fitBounds, flyTo, state.province],
-  );
-
-  const setBarangay = useCallback(
-    (barangay: string, bounds?: [[number, number], [number, number]]) => {
-      setState((prev) => ({ ...prev, barangay }));
-      if (!barangay) return;
-
-      if (bounds) {
-        fitBounds(bounds);
-        return;
-      }
-
-      // Fallback: fly to barangay location via project GPS lookup
-      fetch(`/api/projects?limit=1&search=${encodeURIComponent(barangay)}`)
-        .then((res) => (res.ok ? res.json() : null))
-        .then((data) => {
-          const p = data?.projects?.[0];
-          if (p?.gpsLng && p?.gpsLat) {
-            flyTo([p.gpsLng, p.gpsLat], 14.5);
-          }
-        })
-        .catch(console.error);
-    },
-    [fitBounds, flyTo],
-  );
-
-  const setFilterAnomaly = useCallback((filterAnomaly: string) => {
-    setState((prev) => ({ ...prev, filterAnomaly }));
+  const setRegion = useCallback((region: string) => {
+    setState((prev) => ({ ...EMPTY, region, focusSeq: prev.focusSeq + 1 }));
   }, []);
 
-  const resetAll = useCallback(() => {
-    setState({
-      region: '',
-      province: '',
-      municipality: '',
-      barangay: '',
-      filterAnomaly: 'All',
-    });
-    flyTo([122.0, 12.8], 5.8);
-  }, [flyTo]);
+  const setProvince = useCallback((province: string) => {
+    setState((prev) => ({ ...EMPTY, region: prev.region, province, focusSeq: prev.focusSeq + 1 }));
+  }, []);
 
-  // Navigate breadcrumb: clicking a level resets everything below it
-  const navigateTo = useCallback(
-    (level: 'root' | 'region' | 'province' | 'municipality') => {
+  const setMunicipality = useCallback((municipality: string, cityFile?: string) => {
+    setState((prev) => ({
+      ...EMPTY,
+      region: prev.region,
+      province: prev.province,
+      municipality,
+      cityFile: municipality ? cityFile || '' : '',
+      focusSeq: prev.focusSeq + 1,
+    }));
+  }, []);
+
+  const setBarangay = useCallback((barangay: string, bounds?: LngLatBounds) => {
+    setState((prev) => ({
+      ...prev,
+      barangay,
+      barangayBounds: barangay ? bounds ?? null : null,
+      focusSeq: prev.focusSeq + 1,
+    }));
+  }, []);
+
+  const resetAll = useCallback(() => setState((prev) => ({ ...EMPTY, focusSeq: prev.focusSeq + 1 })), []);
+
+  /** Breadcrumb navigation: clicking a level clears everything below it. */
+  const navigateTo = useCallback((level: 'root' | 'region' | 'province' | 'municipality') => {
+    setState((prev) => {
+      const focusSeq = prev.focusSeq + 1;
       switch (level) {
         case 'root':
-          resetAll();
-          break;
-        case 'region': {
-          setState((prev) => ({
-            ...prev,
-            province: '',
-            municipality: '',
-            barangay: '',
-          }));
-          if (state.region && centroids?.regions) {
-            const c =
-              centroids.regions[state.region] ||
-              centroids.regions[state.region.toLowerCase().trim()];
-            if (c?.bounds) fitBounds(c.bounds);
-          }
-          break;
-        }
-        case 'province': {
-          setState((prev) => ({ ...prev, municipality: '', barangay: '' }));
-          if (state.province && centroids?.provinces) {
-            const c =
-              centroids.provinces[state.province] ||
-              centroids.provinces[state.province.toLowerCase().trim()] ||
-              centroids.provinces[`${state.region}::${state.province}`];
-            if (c?.bounds) fitBounds(c.bounds);
-          }
-          break;
-        }
-        case 'municipality': {
-          setState((prev) => ({ ...prev, barangay: '' }));
-          if (state.municipality && centroids?.cities) {
-            const c =
-              centroids.cities[state.municipality] ||
-              centroids.cities[state.municipality.toLowerCase().trim()] ||
-              centroids.cities[`${state.province}::${state.municipality}`];
-            if (c?.bounds) fitBounds(c.bounds);
-          }
-          break;
-        }
+          return { ...EMPTY, focusSeq };
+        case 'region':
+          return { ...EMPTY, region: prev.region, focusSeq };
+        case 'province':
+          return { ...EMPTY, region: prev.region, province: prev.province, focusSeq };
+        case 'municipality':
+          return { ...prev, barangay: '', barangayBounds: null, focusSeq };
       }
-    },
-    [resetAll, state.region, state.province, state.municipality, centroids, fitBounds],
-  );
+    });
+  }, []);
 
   return {
     ...state,
@@ -217,7 +86,6 @@ export function useDrillDown(
     setProvince,
     setMunicipality,
     setBarangay,
-    setFilterAnomaly,
     resetAll,
     navigateTo,
   };

@@ -2,6 +2,9 @@
 
 import { useMemo, useState, useEffect, useRef } from 'react';
 import { formatCurrency } from '@/lib/format';
+import { isPlaceholderCoords } from '@/lib/coords';
+import { categoryInfo } from '../lib/pin-icons';
+import type { NearMeStatus } from '../hooks/useNearMe';
 
 interface CityItem {
   id: string;
@@ -21,7 +24,7 @@ interface RegionItem {
   provinces: ProvinceItem[];
 }
 
-interface BarangayItem {
+export interface BarangayItem {
   name: string;
   bounds?: [[number, number], [number, number]];
   center?: [number, number];
@@ -35,12 +38,14 @@ interface SearchProjectResult {
   progress?: number;
   gpsLat?: number | null;
   gpsLng?: number | null;
+  category?: string;
   province?: { name: string; region?: { name: string } };
+  /** Corrected place from the API: GPS when real, else the stored record */
+  location?: { province: string; region: string; source: string };
   contractorRaw?: string | null;
 }
 
 interface DrillDownPanelProps {
-  currentZoom: number;
   totalPoints: number;
   isReady: boolean;
   sortedRegions: RegionItem[];
@@ -59,13 +64,66 @@ interface DrillDownPanelProps {
   getCities: (regionName: string, provinceName: string) => CityItem[];
   onFlyToLocation?: (coords: [number, number], zoom?: number) => void;
   onSelectProject?: (projectId: string) => void;
-  onNearMeClick?: () => void;
-  onNearMeSuccess?: (coords: [number, number]) => void;
-  isLocating?: boolean;
+  /** Select a search result on the map: fly there and highlight its pin */
+  onFocusProject?: (projectId: string, coords: [number, number]) => void;
+  nearMe: NearMeStatus;
+  onNearMe: () => void;
+  onPickOnMap: () => void;
+  onCancelNearMe: () => void;
+  barangays?: BarangayItem[];
+  loadingBarangays?: boolean;
+}
+
+const BASEMAPS: Array<{ id: 'satellite' | 'dark' | 'streets'; label: string }> = [
+  { id: 'satellite', label: 'Satellite' },
+  { id: 'dark', label: 'Dark' },
+  { id: 'streets', label: 'Terrain' },
+];
+
+const SELECT_CLASS =
+  'rounded-lg border border-white/15 bg-navy-900 px-2.5 py-1.5 text-xs font-medium text-slate-100 focus:border-amber focus:outline-none';
+
+/** Bolds the first part of the name that matches the search. */
+function Highlight({ text, query }: { text: string; query: string }) {
+  const tokens = query.toLowerCase().split(/\s+/).filter((t) => t.length >= 2);
+  const lower = text.toLowerCase();
+  let at = -1;
+  let len = 0;
+  for (const t of tokens) {
+    const i = lower.indexOf(t);
+    if (i !== -1 && (at === -1 || i < at)) {
+      at = i;
+      len = t.length;
+    }
+  }
+  if (at === -1) return <>{text}</>;
+  return (
+    <>
+      {text.slice(0, at)}
+      <mark className="rounded-sm bg-amber/25 px-0.5 text-amber-soft">{text.slice(at, at + len)}</mark>
+      {text.slice(at + len)}
+    </>
+  );
+}
+
+function placeOf(item: SearchProjectResult): string {
+  if (item.location?.source === 'unknown') return 'Location not confirmed';
+  const province = item.location?.province ?? item.province?.name;
+  const region = (item.location?.region ?? item.province?.region?.name ?? '').replace(/\s*\(.*\)/, '');
+  if (!province) return 'Location not confirmed';
+  return region && region !== province ? `${province}, ${region}` : province;
+}
+
+function PinIcon({ className }: { className?: string }) {
+  return (
+    <svg className={className} fill="none" stroke="currentColor" strokeWidth={2} viewBox="0 0 24 24" aria-hidden="true">
+      <path strokeLinecap="round" strokeLinejoin="round" d="M20 10c0 5-5.5 10.2-7.4 11.8a1 1 0 0 1-1.2 0C9.5 20.2 4 15 4 10a8 8 0 0 1 16 0" />
+      <circle cx="12" cy="10" r="3" />
+    </svg>
+  );
 }
 
 export default function DrillDownPanel({
-  currentZoom,
   totalPoints,
   isReady,
   sortedRegions,
@@ -84,85 +142,51 @@ export default function DrillDownPanel({
   getCities,
   onFlyToLocation,
   onSelectProject,
-  onNearMeClick,
-  onNearMeSuccess,
-  isLocating: externalIsLocating,
+  onFocusProject,
+  nearMe,
+  onNearMe,
+  onPickOnMap,
+  onCancelNearMe,
+  barangays = [],
+  loadingBarangays = false,
 }: DrillDownPanelProps) {
   const currentProvinces = useMemo(() => getProvinces(region), [region, getProvinces]);
   const currentCities = useMemo(() => getCities(region, province), [region, province, getCities]);
 
-  const [barangays, setBarangays] = useState<BarangayItem[]>([]);
-  const [loadingBarangays, setLoadingBarangays] = useState(false);
-
-  // In-HUD Search state
+  // --- Search ---------------------------------------------------------------
   const [searchQuery, setSearchQuery] = useState('');
-  const [searchResults, setSearchResults] = useState<SearchProjectResult[]>([]);
-  const [isSearching, setIsSearching] = useState(false);
+  // Results remember the query they answer, so a slow reply never shows for a newer query
+  const [searchState, setSearchState] = useState<{ q: string; items: SearchProjectResult[] }>({ q: '', items: [] });
+  const trimmedQuery = searchQuery.trim();
+  const searchActive = trimmedQuery.length >= 2;
+  const searchResults = searchActive && searchState.q === trimmedQuery ? searchState.items : [];
+  const isSearching = searchActive && searchState.q !== trimmedQuery;
+  const noResults = searchActive && !isSearching && searchResults.length === 0;
   const [showDropdown, setShowDropdown] = useState(false);
   const searchContainerRef = useRef<HTMLDivElement>(null);
 
-  // Near Me state
-  const [internalIsLocating, setInternalIsLocating] = useState(false);
-  const isLocating = externalIsLocating ?? internalIsLocating;
-  const [geoError, setGeoError] = useState<string | null>(null);
-
   useEffect(() => {
-    if (!municipality) {
-      setBarangays([]);
-      return;
-    }
-
-    const city = currentCities.find((c) => c.name.toLowerCase() === municipality.toLowerCase());
-    setLoadingBarangays(true);
-
-    const params = new URLSearchParams({
-      municipality,
-    });
-    if (province) params.set('province', province);
-    if (city?.file) params.set('cityFile', city.file);
-
-    fetch(`/api/locations/barangays?${params.toString()}`)
-      .then((res) => (res.ok ? res.json() : null))
-      .then((data) => {
-        if (data?.barangays && Array.isArray(data.barangays)) {
-          setBarangays(data.barangays);
-        } else {
-          setBarangays([]);
-        }
-      })
-      .catch(console.error)
-      .finally(() => setLoadingBarangays(false));
-  }, [municipality, province, currentCities]);
-
-  // Debounced Search Effect
-  useEffect(() => {
-    const q = searchQuery.trim();
-    if (!q || q.length < 2) {
-      setSearchResults([]);
-      setIsSearching(false);
-      return;
-    }
-
-    setIsSearching(true);
+    if (trimmedQuery.length < 2) return;
+    let cancelled = false;
     const timer = setTimeout(() => {
-      fetch(`/api/projects?q=${encodeURIComponent(q)}&limit=6`)
+      fetch(`/api/projects?q=${encodeURIComponent(trimmedQuery)}&limit=6`)
         .then((res) => (res.ok ? res.json() : null))
         .then((data) => {
-          if (data?.projects && Array.isArray(data.projects)) {
-            setSearchResults(data.projects);
-            setShowDropdown(true);
-          } else {
-            setSearchResults([]);
-          }
+          if (cancelled) return;
+          const items = Array.isArray(data?.projects) ? (data.projects as SearchProjectResult[]) : [];
+          setSearchState({ q: trimmedQuery, items });
         })
-        .catch(console.error)
-        .finally(() => setIsSearching(false));
+        .catch((err) => {
+          console.error(err);
+          if (!cancelled) setSearchState({ q: trimmedQuery, items: [] });
+        });
     }, 280);
+    return () => {
+      cancelled = true;
+      clearTimeout(timer);
+    };
+  }, [trimmedQuery]);
 
-    return () => clearTimeout(timer);
-  }, [searchQuery]);
-
-  // Close dropdown on outside click
   useEffect(() => {
     function handleClickOutside(e: MouseEvent) {
       if (searchContainerRef.current && !searchContainerRef.current.contains(e.target as Node)) {
@@ -176,84 +200,49 @@ export default function DrillDownPanel({
   const handleSelectResult = (p: SearchProjectResult) => {
     setShowDropdown(false);
     setSearchQuery(p.name);
-    if (p.gpsLng && p.gpsLat && onFlyToLocation) {
-      onFlyToLocation([p.gpsLng, p.gpsLat], 16);
-    } else if (onSelectProject) {
-      onSelectProject(p.id);
+    const realSpot = p.gpsLng && p.gpsLat && !isPlaceholderCoords(p.gpsLat, p.gpsLng);
+    if (realSpot && onFocusProject) {
+      onFocusProject(p.id, [p.gpsLng as number, p.gpsLat as number]);
+    } else if (realSpot && onFlyToLocation) {
+      onFlyToLocation([p.gpsLng as number, p.gpsLat as number], 16);
+    } else {
+      // No real map location: the project page is more useful than a wrong spot
+      onSelectProject?.(p.id);
     }
   };
+
+  // --- Near me ----------------------------------------------------------------
+  const isLocating = nearMe.kind === 'locating';
+  const nearActive = nearMe.kind === 'located' || nearMe.kind === 'picking';
+  const showNearStatus = nearMe.kind === 'locating' || nearMe.kind === 'picking' || nearMe.kind === 'error';
 
   const handleNearMe = () => {
-    if (onNearMeClick) {
-      onNearMeClick();
-      return;
-    }
-
-    if (!navigator.geolocation) {
-      setGeoError('Geolocation not supported by browser');
-      return;
-    }
-
-    setInternalIsLocating(true);
-    setGeoError(null);
-
-    navigator.geolocation.getCurrentPosition(
-      (pos) => {
-        setInternalIsLocating(false);
-        const { longitude, latitude } = pos.coords;
-        if (onFlyToLocation) {
-          onFlyToLocation([longitude, latitude], 13.5);
-        }
-        if (onNearMeSuccess) {
-          onNearMeSuccess([longitude, latitude]);
-        }
-      },
-      (err) => {
-        setInternalIsLocating(false);
-        console.warn('Geolocation error:', err.message);
-        setGeoError('Location permission denied or unavailable');
-        setTimeout(() => setGeoError(null), 3500);
-      },
-      { enableHighAccuracy: true, timeout: 10000, maximumAge: 30000 }
-    );
+    if (nearActive || nearMe.kind === 'error' || isLocating) onCancelNearMe();
+    else onNearMe();
   };
 
-  const formatCount = (n: number) => {
-    if (n >= 1000000) return `${(n / 1000000).toFixed(1)}M`;
-    if (n >= 1000) return `${(n / 1000).toFixed(1)}k`;
-    return n.toLocaleString();
-  };
+  const countLabel = isReady ? `${totalPoints.toLocaleString()} projects on the map` : 'Loading projects…';
 
   return (
-    <div className="absolute top-4 left-1/2 -translate-x-1/2 z-30 w-[96%] max-w-6xl bg-navy-950/95 backdrop-blur-xl rounded-2xl border border-navy/70 shadow-2xl flex flex-col gap-2.5 p-3 text-white">
-      {/* -- ROW 1: Breadcrumbs + In-HUD Search + Near Me + Counters -- */}
+    <div className="mtn-rise absolute left-1/2 top-4 z-30 flex w-[calc(100%-2rem)] max-w-6xl -translate-x-1/2 flex-col gap-2.5 rounded-xl border border-white/10 bg-navy-950/95 p-3 text-white shadow-xl">
+      {/* Row 1: where you are · search · near me · basemap */}
       <div className="flex flex-wrap items-center justify-between gap-3">
-        {/* Breadcrumb Hierarchy Navigation */}
-        <div className="flex items-center gap-1 text-[11px] font-mono text-slate-300 shrink-0">
-          <button
-            onClick={() => navigateTo('root')}
-            className="hover:text-amber px-1.5 py-0.5 rounded transition font-bold"
-          >
-            PH
+        <nav aria-label="Area" className="flex shrink-0 items-center gap-1 text-xs text-slate-300">
+          <button onClick={() => navigateTo('root')} className="rounded px-1.5 py-0.5 font-semibold transition-colors hover:text-amber">
+            Philippines
           </button>
           {region && (
             <>
               <span className="text-slate-500">/</span>
-              <button
-                onClick={() => navigateTo('region')}
-                className="hover:text-amber px-1.5 py-0.5 rounded transition"
-              >
-                {region.replace(/\s*\(.*\)/, '').slice(0, 16)}
+              <button onClick={() => navigateTo('region')} className="max-w-[10rem] truncate rounded px-1.5 py-0.5 transition-colors hover:text-amber">
+                {region.replace(/\s*\(.*\)/, '')}
               </button>
             </>
           )}
           {province && (
             <>
               <span className="text-slate-500">/</span>
-              <button
-                onClick={() => navigateTo('province')}
-                className="hover:text-amber px-1.5 py-0.5 rounded transition text-amber"
-              >
+              <button onClick={() => navigateTo('province')} className="rounded px-1.5 py-0.5 transition-colors hover:text-amber">
                 {province}
               </button>
             </>
@@ -261,10 +250,7 @@ export default function DrillDownPanel({
           {municipality && (
             <>
               <span className="text-slate-500">/</span>
-              <button
-                onClick={() => navigateTo('municipality')}
-                className="hover:text-amber px-1.5 py-0.5 rounded transition text-emerald-400"
-              >
+              <button onClick={() => navigateTo('municipality')} className="rounded px-1.5 py-0.5 transition-colors hover:text-amber">
                 {municipality}
               </button>
             </>
@@ -272,76 +258,78 @@ export default function DrillDownPanel({
           {barangay && (
             <>
               <span className="text-slate-500">/</span>
-              <span className="text-cyan-300 font-bold">{barangay}</span>
+              <span className="px-1.5 font-semibold text-white">{barangay}</span>
             </>
           )}
-        </div>
+        </nav>
 
-        {/* Center: Real-Time In-HUD Search Input */}
-        <div ref={searchContainerRef} className="relative flex-1 min-w-[240px] max-w-lg">
+        {/* Search */}
+        <div ref={searchContainerRef} className="relative min-w-[240px] max-w-lg flex-1">
           <div className="relative">
-            <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none text-slate-400">
+            <div className="pointer-events-none absolute inset-y-0 left-0 flex items-center pl-3 text-slate-400">
               {isSearching ? (
-                <div className="w-3.5 h-3.5 border-2 border-amber border-t-transparent rounded-full animate-spin" />
+                <div className="h-3.5 w-3.5 animate-spin rounded-full border-2 border-amber border-t-transparent" />
               ) : (
-                <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <svg className="h-3.5 w-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden="true">
                   <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.5} d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" />
                 </svg>
               )}
             </div>
             <input
-              type="text"
+              type="search"
               value={searchQuery}
               onChange={(e) => {
                 setSearchQuery(e.target.value);
                 setShowDropdown(true);
               }}
-              onFocus={() => {
-                if (searchResults.length > 0) setShowDropdown(true);
+              onFocus={() => setShowDropdown(true)}
+              onKeyDown={(e) => {
+                if (e.key === 'Escape') setShowDropdown(false);
               }}
-              placeholder="Search 246k+ projects, contractors, locations..."
-              className="w-full bg-navy-800/80 text-white placeholder-slate-400 text-xs font-semibold pl-9 pr-8 py-2 rounded-xl border border-navy focus:border-amber focus:ring-1 focus:ring-amber focus:outline-none transition-all"
+              aria-label="Search projects, contractors or places"
+              placeholder="Search a project, contractor or place"
+              className="w-full rounded-lg border border-white/15 bg-navy-900 py-2 pl-9 pr-8 text-sm text-white placeholder-slate-400 transition-colors focus:border-amber focus:outline-none"
             />
             {searchQuery && (
               <button
                 onClick={() => {
                   setSearchQuery('');
-                  setSearchResults([]);
                   setShowDropdown(false);
                 }}
-                className="absolute inset-y-0 right-0 pr-3 flex items-center text-slate-400 hover:text-white"
+                aria-label="Clear search"
+                className="absolute inset-y-0 right-0 flex items-center pr-3 text-slate-400 hover:text-white"
               >
                 &times;
               </button>
             )}
           </div>
 
-          {/* Search Autocomplete Dropdown */}
-          {showDropdown && searchResults.length > 0 && (
-            <div className="absolute left-0 right-0 mt-1.5 bg-navy-950 border border-navy rounded-xl shadow-2xl overflow-hidden z-50 divide-y divide-white/5 max-h-72 overflow-y-auto">
+          {showDropdown && (searchResults.length > 0 || noResults) && (
+            <div className="mtn-rise absolute left-0 right-0 z-50 mt-1.5 max-h-80 divide-y divide-white/5 overflow-y-auto rounded-lg border border-white/10 bg-navy-950 shadow-xl">
+              {noResults && <p className="p-3 text-xs text-slate-400">No projects match &ldquo;{trimmedQuery}&rdquo;.</p>}
               {searchResults.map((item) => (
                 <button
                   key={item.id}
                   onClick={() => handleSelectResult(item)}
-                  className="w-full text-left p-2.5 hover:bg-white/10 transition flex flex-col gap-0.5 group"
+                  className="group flex w-full flex-col gap-1 p-2.5 text-left transition-colors hover:bg-white/10 focus-visible:bg-white/10 focus-visible:outline-none"
                 >
-                  <div className="flex items-center justify-between gap-2">
-                    <span className="text-xs font-bold text-slate-100 group-hover:text-amber truncate">
-                      {item.name}
+                  <div className="flex items-start justify-between gap-2">
+                    <span className="line-clamp-2 text-xs font-semibold leading-snug text-slate-100">
+                      <Highlight text={item.name} query={trimmedQuery} />
                     </span>
                     {item.budgetPHP !== undefined && (
-                      <span className="text-[11px] font-mono font-bold text-amber shrink-0">
-                        {formatCurrency(item.budgetPHP)}
-                      </span>
+                      <span className="shrink-0 text-xs font-semibold tabular-nums text-amber">{formatCurrency(item.budgetPHP)}</span>
                     )}
                   </div>
-                  <div className="flex items-center justify-between text-[10px] text-slate-400">
-                    <span className="truncate">
-                      {item.province?.name || 'Philippines'} {item.contractorRaw ? `• ${item.contractorRaw}` : ''}
+                  <div className="flex items-center justify-between gap-2 text-[11px] text-slate-400">
+                    <span className="inline-flex min-w-0 items-center gap-1">
+                      <PinIcon className="h-3 w-3 shrink-0" />
+                      <span className={`truncate ${item.location?.source === 'unknown' ? 'italic' : 'text-slate-200'}`}>
+                        {placeOf(item)}
+                      </span>
+                      {item.category && <span className="shrink-0">· {categoryInfo(item.category).label}</span>}
                     </span>
-                    <span className="text-slate-500 font-mono text-[9px] shrink-0">
-                      ID: {item.id}
-                    </span>
+                    <span className="shrink-0 font-mono text-[10px] text-slate-500">{item.id}</span>
                   </div>
                 </button>
               ))}
@@ -349,142 +337,145 @@ export default function DrillDownPanel({
           )}
         </div>
 
-        {/* Right: In-HUD "Near Me" GPS Radar Button + Counter */}
         <div className="flex items-center gap-2">
-          {/* Near Me GPS Button */}
           <button
             onClick={handleNearMe}
-            disabled={isLocating}
-            className={`inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl text-xs font-bold transition-all border shadow-sm ${
-              isLocating
-                ? 'bg-amber text-navy-950 border-amber animate-pulse'
-                : 'bg-white/10 hover:bg-white/20 text-white border-white/15 hover:border-amber/60'
+            aria-pressed={nearActive}
+            className={`inline-flex items-center gap-1.5 rounded-lg border px-3 py-1.5 text-xs font-semibold transition-colors ${
+              isLocating || nearActive
+                ? 'border-amber bg-amber text-navy-950'
+                : 'border-white/15 bg-white/10 text-white hover:border-amber/60 hover:bg-white/15'
             }`}
-            title="Center map on your current GPS coordinates"
+            title={nearActive ? 'Stop showing nearby projects' : 'Show projects near you'}
           >
-            <svg
-              className={`w-3.5 h-3.5 ${isLocating ? 'animate-spin' : 'text-amber'}`}
-              fill="none"
-              stroke="currentColor"
-              viewBox="0 0 24 24"
-            >
-              <circle cx="12" cy="12" r="8" strokeWidth={2} />
-              <line x1="12" y1="2" x2="12" y2="6" strokeWidth={2} />
-              <line x1="12" y1="18" x2="12" y2="22" strokeWidth={2} />
-              <line x1="2" y1="12" x2="6" y2="12" strokeWidth={2} />
-              <line x1="18" y1="12" x2="22" y2="12" strokeWidth={2} />
-              <circle cx="12" cy="12" r="2" fill="currentColor" />
-            </svg>
-            <span>{isLocating ? 'Locating...' : 'Near Me'}</span>
+            {isLocating ? (
+              <span className="h-3.5 w-3.5 animate-spin rounded-full border-2 border-navy-950 border-t-transparent" aria-hidden="true" />
+            ) : (
+              <svg className={`h-3.5 w-3.5 ${nearActive ? '' : 'text-amber'}`} fill="none" stroke="currentColor" strokeWidth={2} viewBox="0 0 24 24" aria-hidden="true">
+                <circle cx="12" cy="12" r="8" />
+                <path strokeLinecap="round" d="M12 2v4M12 18v4M2 12h4M18 12h4" />
+                <circle cx="12" cy="12" r="2" fill="currentColor" />
+              </svg>
+            )}
+            <span>{isLocating ? 'Finding you' : 'Near me'}</span>
+            {nearActive && (
+              <svg className="h-3 w-3" fill="none" stroke="currentColor" strokeWidth={2.5} viewBox="0 0 24 24" aria-hidden="true">
+                <path strokeLinecap="round" d="M18 6 6 18M6 6l12 12" />
+              </svg>
+            )}
           </button>
 
-          {/* Project Count Indicator */}
-          <div className="hidden sm:flex items-center gap-1.5 px-2.5 py-1.5 rounded-xl bg-white/5 border border-white/10 font-mono text-[11px]">
-            <span className="h-1.5 w-1.5 rounded-full bg-emerald-400 animate-pulse" />
-            <span className="font-bold text-slate-200">
-              {isReady ? `${formatCount(totalPoints)} PTS` : 'LOADING...'}
-            </span>
-          </div>
+          <span className="hidden rounded-lg border border-white/10 bg-white/5 px-2.5 py-1.5 text-xs tabular-nums text-slate-300 sm:inline">
+            {countLabel}
+          </span>
 
-          {/* Basemap Toggle Pills */}
-          <div className="flex items-center bg-white/10 p-0.5 rounded-xl border border-white/15 text-[11px] font-mono">
-            <button
-              onClick={() => setBasemap('satellite')}
-              className={`px-2 py-1 rounded-lg transition-all ${
-                basemap === 'satellite'
-                  ? 'bg-amber text-navy-950 font-bold shadow-xs'
-                  : 'text-slate-300 hover:text-white'
-              }`}
-            >
-              SAT
-            </button>
-            <button
-              onClick={() => setBasemap('dark')}
-              className={`px-2 py-1 rounded-lg transition-all ${
-                basemap === 'dark'
-                  ? 'bg-amber text-navy-950 font-bold shadow-xs'
-                  : 'text-slate-300 hover:text-white'
-              }`}
-            >
-              DARK
-            </button>
-            <button
-              onClick={() => setBasemap('streets')}
-              className={`px-2 py-1 rounded-lg transition-all ${
-                basemap === 'streets'
-                  ? 'bg-amber text-navy-950 font-bold shadow-xs'
-                  : 'text-slate-300 hover:text-white'
-              }`}
-            >
-              TERR
-            </button>
+          <div role="group" aria-label="Map style" className="flex items-center rounded-lg border border-white/15 bg-white/5 p-0.5 text-xs">
+            {BASEMAPS.map((b) => (
+              <button
+                key={b.id}
+                onClick={() => setBasemap(b.id)}
+                aria-pressed={basemap === b.id}
+                className={`rounded-md px-2 py-1 transition-colors ${
+                  basemap === b.id ? 'bg-amber font-semibold text-navy-950' : 'text-slate-300 hover:text-white'
+                }`}
+              >
+                {b.label}
+              </button>
+            ))}
           </div>
         </div>
       </div>
 
-      {/* Geolocation feedback error toast */}
-      {geoError && (
-        <div className="bg-red-500/20 border border-red-500/40 text-red-200 text-[11px] px-3 py-1 rounded-lg text-center font-mono">
-          {geoError}
+      {/* Near me: progress, problems, and the tap-the-map fallback */}
+      {showNearStatus && (
+        <div
+          role="status"
+          aria-live="polite"
+          className={`mtn-rise flex flex-wrap items-center justify-between gap-2 rounded-lg border px-3 py-2 text-xs ${
+            nearMe.kind === 'error' ? 'border-amber/40 bg-amber/10 text-amber-soft' : 'border-white/15 bg-white/5 text-slate-200'
+          }`}
+        >
+          <span className="min-w-0 flex-1">
+            {nearMe.kind === 'locating' && 'Finding your location. If your browser asks, choose Allow.'}
+            {nearMe.kind === 'picking' && 'Tap your spot on the map to see the projects around it.'}
+            {nearMe.kind === 'error' && nearMe.message}
+          </span>
+          <span className="flex shrink-0 items-center gap-1.5">
+            {nearMe.kind !== 'picking' && (
+              <button type="button" onClick={onPickOnMap} className="rounded-md bg-white/15 px-2.5 py-1 font-semibold text-white transition-colors hover:bg-white/25">
+                Tap the map instead
+              </button>
+            )}
+            {nearMe.kind === 'error' && nearMe.reason !== 'unsupported' && nearMe.reason !== 'insecure' && (
+              <button type="button" onClick={onNearMe} className="rounded-md bg-amber px-2.5 py-1 font-semibold text-navy-950 transition-colors hover:bg-amber-soft">
+                Try again
+              </button>
+            )}
+            <button type="button" onClick={onCancelNearMe} className="rounded-md px-2 py-1 text-slate-300 transition-colors hover:bg-white/10 hover:text-white">
+              Cancel
+            </button>
+          </span>
         </div>
       )}
 
-      {/* -- ROW 2: Hierarchical Dropdowns -- */}
-      <div className="flex flex-wrap items-center gap-1.5 pt-1 border-t border-white/10 text-xs">
-        <select
-          value={region}
-          onChange={(e) => setRegion(e.target.value)}
-          className="rounded-lg border border-navy bg-navy-800 px-2.5 py-1 text-xs font-semibold text-slate-200 focus:outline-none focus:border-amber"
-        >
-          <option value="">All Regions</option>
+      {/* Row 2: pick an area */}
+      <div className="flex flex-wrap items-center gap-1.5 border-t border-white/10 pt-2">
+        <select aria-label="Region" value={region} onChange={(e) => setRegion(e.target.value)} className={SELECT_CLASS}>
+          <option value="">All regions</option>
           {sortedRegions.map((r) => (
-            <option key={r.id} value={r.name}>{r.name}</option>
+            <option key={r.id} value={r.name}>
+              {r.name}
+            </option>
           ))}
         </select>
 
         {region && (
-          <select
-            value={province}
-            onChange={(e) => setProvince(e.target.value)}
-            className="rounded-lg border border-navy bg-navy-800 px-2.5 py-1 text-xs font-semibold text-slate-200 focus:outline-none focus:border-amber"
-          >
-            <option value="">All Provinces</option>
+          <select aria-label="Province" value={province} onChange={(e) => setProvince(e.target.value)} className={SELECT_CLASS}>
+            <option value="">All provinces</option>
             {currentProvinces.map((p) => (
-              <option key={p.id} value={p.name}>{p.name}</option>
+              <option key={p.id} value={p.name}>
+                {p.name}
+              </option>
             ))}
           </select>
         )}
 
         {province && (
           <select
+            aria-label="City or town"
             value={municipality}
             onChange={(e) => {
               const val = e.target.value;
               const cityItem = currentCities.find((c) => c.name === val);
               setMunicipality(val, cityItem?.file);
             }}
-            className="rounded-lg border border-navy bg-navy-800 px-2.5 py-1 text-xs font-semibold text-slate-200 focus:outline-none focus:border-amber"
+            className={SELECT_CLASS}
           >
-            <option value="">All Cities / Muni</option>
+            <option value="">All cities and towns</option>
             {currentCities.map((c) => (
-              <option key={c.id} value={c.name}>{c.name}</option>
+              <option key={c.id} value={c.name}>
+                {c.name}
+              </option>
             ))}
           </select>
         )}
 
-        {(municipality || province) && barangays.length > 0 && (
+        {(municipality || province) && (barangays.length > 0 || loadingBarangays) && (
           <select
+            aria-label="Barangay"
             value={barangay}
             onChange={(e) => {
               const val = e.target.value;
               const bObj = barangays.find((b) => b.name === val);
               setBarangay(val, bObj?.bounds);
             }}
-            className="rounded-lg border border-navy bg-navy-800 px-2.5 py-1 text-xs font-semibold text-slate-200 focus:outline-none focus:border-amber"
+            className={SELECT_CLASS}
           >
-            <option value="">All Barangays</option>
+            <option value="">{loadingBarangays ? 'Loading barangays…' : 'All barangays'}</option>
             {barangays.map((b) => (
-              <option key={b.name} value={b.name}>{b.name}</option>
+              <option key={b.name} value={b.name}>
+                {b.name}
+              </option>
             ))}
           </select>
         )}

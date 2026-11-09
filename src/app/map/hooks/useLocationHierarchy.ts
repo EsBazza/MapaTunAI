@@ -27,44 +27,7 @@ interface LocationHierarchy {
   totalCities: number;
 }
 
-// Philippine standard region ordering (NCR first, then CAR, then numbered regions, then BARMM/CARAGA)
-const REGION_ORDER: string[] = [
-  'National Capital Region (NCR)',
-  'Cordillera Administrative Region (CAR)',
-  'Region I (Ilocos Region)',
-  'Ilocos Region (Region I)',
-  'Region II (Cagayan Valley)',
-  'Cagayan Valley (Region II)',
-  'Region III (Central Luzon)',
-  'Central Luzon (Region III)',
-  'Region IV-A (CALABARZON)',
-  'CALABARZON (Region IV-A)',
-  'Region IV-B (MIMAROPA)',
-  'MIMAROPA (Region IV-B)',
-  'Region V (Bicol Region)',
-  'Bicol Region (Region V)',
-  'Region VI (Western Visayas)',
-  'Western Visayas (Region VI)',
-  'Region VII (Central Visayas)',
-  'Central Visayas (Region VII)',
-  'Region VIII (Eastern Visayas)',
-  'Eastern Visayas (Region VIII)',
-  'Region IX (Zamboanga Peninsula)',
-  'Zamboanga Peninsula (Region IX)',
-  'Region X (Northern Mindanao)',
-  'Northern Mindanao (Region X)',
-  'Region XI (Davao Region)',
-  'Davao Region (Region XI)',
-  'Region XII (SOCCSKSARGEN)',
-  'SOCCSKSARGEN (Region XII)',
-  'Region XIII (Caraga)',
-  'Caraga (Region XIII)',
-  'CARAGA',
-  'Autonomous Region of Muslim Mindanao (ARMM)',
-  'BARMM',
-  'Bangsamoro Autonomous Region in Muslim Mindanao (BARMM)',
-];
-
+// Philippine standard region ordering: NCR, CAR, Regions I–XIII, then BARMM
 function getRegionSortOrder(name: string): number {
   const n = name.toLowerCase();
   if (n.includes('ncr') || n.includes('national capital')) return 0;
@@ -144,11 +107,44 @@ export function useLocationHierarchy() {
     [getProvinces],
   );
 
+  /**
+   * Fallback camera target from region_centroids.json, used only when an
+   * area has no polygon in the boundary files (e.g. some lakes and cities).
+   */
+  const getCentroid = useCallback(
+    (sel: { region: string; province: string; municipality: string; cityFile?: string }) => {
+      if (!centroids) return null;
+      const lower = (s: string) => s.toLowerCase().trim();
+      let entry: Centroids['regions'][string] | undefined;
+      if (sel.municipality) {
+        entry =
+          (sel.cityFile ? centroids.cities[sel.cityFile] : undefined) ||
+          centroids.cities[`${sel.province}::${sel.municipality}`] ||
+          centroids.cities[sel.municipality] ||
+          centroids.cities[lower(sel.municipality)];
+      } else if (sel.province) {
+        entry =
+          centroids.provinces[`${sel.region}::${sel.province}`] ||
+          centroids.provinces[sel.province] ||
+          centroids.provinces[lower(sel.province)];
+      } else if (sel.region) {
+        entry = centroids.regions[sel.region] || centroids.regions[lower(sel.region)];
+      }
+      if (!entry) return null;
+      // Ignore placeholder entries that sit outside the Philippines
+      const [lng, lat] = entry.center;
+      if (lng < 114 || lng > 129 || lat < 4 || lat > 22) return null;
+      return entry;
+    },
+    [centroids],
+  );
+
   return {
     hierarchy,
     sortedRegions,
     centroids,
     getProvinces,
     getCities,
+    getCentroid,
   };
 }

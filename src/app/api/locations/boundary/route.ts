@@ -1,52 +1,6 @@
 import fs from 'fs';
 import path from 'path';
-
-// World ring covering entire globe for inverted mask
-const WORLD_RING: [number, number][] = [
-  [-180, -90],
-  [180, -90],
-  [180, 90],
-  [-180, 90],
-  [-180, -90],
-];
-
-function getBBox(geometry: any) {
-  let minLng = Infinity, minLat = Infinity, maxLng = -Infinity, maxLat = -Infinity;
-  function traverse(coords: any) {
-    if (typeof coords[0] === 'number') {
-      const [lng, lat] = coords;
-      if (lng < minLng) minLng = lng;
-      if (lng > maxLng) maxLng = lng;
-      if (lat < minLat) minLat = lat;
-      if (lat > maxLat) maxLat = lat;
-    } else {
-      for (const c of coords) traverse(c);
-    }
-  }
-  traverse(geometry.coordinates);
-  return [
-    [+minLng.toFixed(5), +minLat.toFixed(5)],
-    [+maxLng.toFixed(5), +maxLat.toFixed(5)],
-  ] as [[number, number], [number, number]];
-}
-
-function createInvertedMask(geometry: any) {
-  let holes: [number, number][][] = [];
-  if (geometry.type === 'Polygon') {
-    holes = [geometry.coordinates[0]];
-  } else if (geometry.type === 'MultiPolygon') {
-    holes = geometry.coordinates.map((poly: any) => poly[0]);
-  }
-
-  return {
-    type: 'Feature',
-    properties: {},
-    geometry: {
-      type: 'Polygon',
-      coordinates: [WORLD_RING, ...holes],
-    },
-  };
-}
+import { WORLD_RING, getBBox, createInvertedMask } from '@/lib/geo-bounds';
 
 export async function GET(req: Request) {
   try {
@@ -304,7 +258,7 @@ export async function GET(req: Request) {
       });
     }
 
-    const bounds = getBBox(boundaryFeature.geometry);
+    const bounds = getBBox(boundaryFeature.geometry) ?? [[116, 4], [127, 21]];
     const center: [number, number] = [
       +((bounds[0][0] + bounds[1][0]) / 2).toFixed(5),
       +((bounds[0][1] + bounds[1][1]) / 2).toFixed(5),

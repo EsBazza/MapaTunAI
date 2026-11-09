@@ -1,164 +1,153 @@
 'use client';
 
 import { useRef, useEffect, useCallback, useState } from 'react';
+import type {
+  ClusterOrPoint,
+  PointsMetadata,
+  WorkerFilters,
+  WorkerRequest,
+  WorkerResponse,
+  SidebarPoint,
+} from '../lib/map-types';
 
-interface ClusterFeature {
-  type: 'Feature';
-  id?: number;
-  properties: Record<string, any>;
-  geometry: {
-    type: 'Point';
-    coordinates: [number, number];
-  };
-}
+export type { ClusterOrPoint };
 
-interface Filters {
-  region?: string;
-  province?: string;
-  flags?: string[];
-  category?: string;
-}
+type PendingRequest = Exclude<WorkerRequest, { type: 'load' }>;
+// Distributes Omit over the union so each variant keeps its own fields
+type RequestBody<T = PendingRequest> = T extends PendingRequest ? Omit<T, 'id'> : never;
 
+/**
+ * Runs Supercluster in a Web Worker. Every request carries an id so that
+ * overlapping calls (pan + sidebar + filter) never steal each other's replies.
+ */
 export function useSupercluster() {
   const workerRef = useRef<Worker | null>(null);
+  const pendingRef = useRef(new Map<number, (data: unknown) => void>());
+  const nextIdRef = useRef(1);
+
   const [isReady, setIsReady] = useState(false);
+  const [namesReady, setNamesReady] = useState(false);
+  const [loadError, setLoadError] = useState<string | null>(null);
   const [totalPoints, setTotalPoints] = useState(0);
-  const resolversRef = useRef<Map<string, (data: any) => void>>(new Map());
+  const [nationalTotal, setNationalTotal] = useState(0);
+  const [unlocated, setUnlocated] = useState(0);
+  const [metadata, setMetadata] = useState<PointsMetadata | null>(null);
+  const [provinceCounts, setProvinceCounts] = useState<number[]>([]);
 
-  // Initialize worker and load data
   useEffect(() => {
-    const worker = new Worker(
-      new URL('../workers/cluster.worker.ts', import.meta.url),
-      { type: 'module' },
-    );
+    const worker = new Worker(new URL('../workers/cluster.worker.ts', import.meta.url), {
+      type: 'module',
+    });
+    const pending = pendingRef.current;
 
-    worker.onmessage = (e) => {
-      const { type, data, totalPoints: tp, zoom } = e.data;
-
-      switch (type) {
+    worker.onmessage = (e: MessageEvent<WorkerResponse>) => {
+      const msg = e.data;
+      switch (msg.type) {
         case 'ready':
+          setMetadata(msg.metadata);
+          setProvinceCounts(msg.provinceCounts);
+          setTotalPoints(msg.totalPoints);
+          setNationalTotal(msg.totalPoints);
+          setUnlocated(msg.unlocated);
           setIsReady(true);
-          setTotalPoints(tp);
-          // Resolve any pending 'load' promise
-          resolversRef.current.get('load')?.(tp);
-          resolversRef.current.delete('load');
           break;
-        case 'clusters':
-          resolversRef.current.get('getClusters')?.(data);
-          resolversRef.current.delete('getClusters');
+        case 'namesReady':
+          setNamesReady(true);
           break;
-        case 'filtered':
-          setTotalPoints(tp);
-          resolversRef.current.get('filter')?.(tp);
-          resolversRef.current.delete('filter');
+        case 'error':
+          setLoadError(msg.message);
           break;
-        case 'leaves':
-          resolversRef.current.get('getLeaves')?.(data);
-          resolversRef.current.delete('getLeaves');
+        case 'result': {
+          const resolve = pending.get(msg.id);
+          if (resolve) {
+            pending.delete(msg.id);
+            resolve(msg.data);
+          }
           break;
-        case 'expansionZoom':
-          resolversRef.current.get('expansionZoom')?.(zoom);
-          resolversRef.current.delete('expansionZoom');
-          break;
+        }
       }
     };
 
+    const origin = window.location.origin;
+    worker.postMessage({
+      type: 'load',
+      pointsUrl: `${origin}/geo/points.json`,
+      namesUrl: `${origin}/geo/names.json`,
+    } satisfies WorkerRequest);
     workerRef.current = worker;
-
-    // Load the static GeoJSON file
-    fetch('/geo/all_projects.json')
-      .then((res) => res.json())
-      .then((geojson) => {
-        worker.postMessage({
-          type: 'load',
-          payload: { features: geojson.features, metadata: geojson.metadata },
-        });
-      })
-      .catch((err) => {
-        console.error('Failed to load project data:', err);
-      });
 
     return () => {
       worker.terminate();
       workerRef.current = null;
+      pending.clear();
       setIsReady(false);
     };
   }, []);
 
+  const request = useCallback(<T,>(body: RequestBody, fallback: T): Promise<T> => {
+    const worker = workerRef.current;
+    if (!worker) return Promise.resolve(fallback);
+    const id = nextIdRef.current++;
+    return new Promise<T>((resolve) => {
+      pendingRef.current.set(id, (data) => resolve(data as T));
+      worker.postMessage({ ...body, id } as WorkerRequest);
+    });
+  }, []);
+
   const getClusters = useCallback(
-    (bbox: [number, number, number, number], zoom: number): Promise<ClusterFeature[]> => {
-      return new Promise((resolve) => {
-        if (!workerRef.current || !isReady) {
-          resolve([]);
-          return;
-        }
-        resolversRef.current.set('getClusters', resolve);
-        workerRef.current.postMessage({
-          type: 'getClusters',
-          payload: { bbox, zoom },
-        });
-      });
-    },
-    [isReady],
+    (bbox: [number, number, number, number], zoom: number) =>
+      isReady ? request<ClusterOrPoint[]>({ type: 'getClusters', bbox, zoom }, []) : Promise.resolve([]),
+    [isReady, request],
   );
 
   const applyFilters = useCallback(
-    (filters: Filters): Promise<number> => {
-      return new Promise((resolve) => {
-        if (!workerRef.current) {
-          resolve(0);
-          return;
-        }
-        resolversRef.current.set('filter', resolve);
-        workerRef.current.postMessage({
-          type: 'filter',
-          payload: { filters },
-        });
-      });
+    async (filters: WorkerFilters) => {
+      const total = await request<number>({ type: 'filter', filters }, 0);
+      setTotalPoints(total);
+      return total;
     },
-    [],
+    [request],
   );
 
-  const getLeaves = useCallback(
-    (clusterId: number, limit = 100, offset = 0): Promise<ClusterFeature[]> => {
-      return new Promise((resolve) => {
-        if (!workerRef.current || !isReady) {
-          resolve([]);
-          return;
-        }
-        resolversRef.current.set('getLeaves', resolve);
-        workerRef.current.postMessage({
-          type: 'getLeaves',
-          payload: { clusterId, limit, offset },
-        });
-      });
-    },
-    [isReady],
+  const listPoints = useCallback(
+    (limit = 30) =>
+      request<{ total: number; items: SidebarPoint[] }>({ type: 'list', limit }, { total: 0, items: [] }),
+    [request],
   );
 
   const getExpansionZoom = useCallback(
-    (clusterId: number): Promise<number> => {
-      return new Promise((resolve) => {
-        if (!workerRef.current || !isReady) {
-          resolve(16);
-          return;
-        }
-        resolversRef.current.set('expansionZoom', resolve);
-        workerRef.current.postMessage({
-          type: 'expansionZoom',
-          payload: { clusterId },
-        });
-      });
-    },
-    [isReady],
+    (clusterId: number) => request<number>({ type: 'expansionZoom', clusterId }, 16),
+    [request],
+  );
+
+  const findProject = useCallback(
+    (projectId: string) => request<[number, number] | null>({ type: 'findById', projectId }, null),
+    [request],
+  );
+
+  const listNear = useCallback(
+    (center: [number, number], radiusKm = 5, limit = 40) =>
+      request<{ total: number; items: SidebarPoint[] }>(
+        { type: 'near', center, radiusKm, limit },
+        { total: 0, items: [] },
+      ),
+    [request],
   );
 
   return {
     isReady,
+    namesReady,
+    loadError,
     totalPoints,
+    nationalTotal,
+    unlocated,
+    metadata,
+    provinceCounts,
     getClusters,
     applyFilters,
-    getLeaves,
+    listPoints,
     getExpansionZoom,
+    findProject,
+    listNear,
   };
 }

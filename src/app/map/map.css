@@ -1,0 +1,179 @@
+/* Map-only styles. Kept out of globals.css on purpose. */
+
+:root {
+  --mtn-ease-out: cubic-bezier(0.23, 1, 0.32, 1);
+  --mtn-navy: #011438;
+}
+
+/* --- Popups: our cards bring their own dark surface ----------------------
+   Mapbox wraps popup HTML in a white, padded box with a white tip. That is
+   the "white border" around the dark card, so we neutralise it here. */
+.mtn-popup .mapboxgl-popup-content {
+  background: transparent;
+  padding: 0;
+  box-shadow: none;
+  border-radius: 14px;
+}
+.mtn-popup .mapboxgl-popup-close-button {
+  color: #cbd5e1;
+  font-size: 18px;
+  right: 4px;
+  top: 4px;
+  border-radius: 8px;
+}
+.mtn-popup .mapboxgl-popup-close-button:hover {
+  background: rgba(255, 255, 255, 0.1);
+  color: #fff;
+}
+.mtn-popup.mapboxgl-popup-anchor-top .mapboxgl-popup-tip,
+.mtn-popup.mapboxgl-popup-anchor-top-left .mapboxgl-popup-tip,
+.mtn-popup.mapboxgl-popup-anchor-top-right .mapboxgl-popup-tip {
+  border-bottom-color: var(--mtn-navy);
+}
+.mtn-popup.mapboxgl-popup-anchor-bottom .mapboxgl-popup-tip,
+.mtn-popup.mapboxgl-popup-anchor-bottom-left .mapboxgl-popup-tip,
+.mtn-popup.mapboxgl-popup-anchor-bottom-right .mapboxgl-popup-tip {
+  border-top-color: var(--mtn-navy);
+}
+.mtn-popup.mapboxgl-popup-anchor-left .mapboxgl-popup-tip {
+  border-right-color: var(--mtn-navy);
+}
+.mtn-popup.mapboxgl-popup-anchor-right .mapboxgl-popup-tip {
+  border-left-color: var(--mtn-navy);
+}
+
+/* Enter: small scale from the tip, 150ms. Popups appear on hover, so keep it quick. */
+.mtn-popup .mapboxgl-popup-content {
+  animation: mtn-popup-in 150ms var(--mtn-ease-out);
+}
+.mtn-popup.mapboxgl-popup-anchor-bottom .mapboxgl-popup-content { transform-origin: 50% 100%; }
+.mtn-popup.mapboxgl-popup-anchor-top .mapboxgl-popup-content { transform-origin: 50% 0%; }
+.mtn-popup.mapboxgl-popup-anchor-left .mapboxgl-popup-content { transform-origin: 0% 50%; }
+.mtn-popup.mapboxgl-popup-anchor-right .mapboxgl-popup-content { transform-origin: 100% 50%; }
+
+@keyframes mtn-popup-in {
+  from { opacity: 0; transform: scale(0.96); }
+  to { opacity: 1; transform: scale(1); }
+}
+
+/* --- Donut clusters ------------------------------------------------------ */
+.mtn-cluster {
+  cursor: pointer;
+  border-radius: 999px;
+  outline: none;
+}
+.mtn-cluster__body {
+  position: relative;
+  display: grid;
+  place-items: center;
+  border-radius: 999px;
+  /* drop-shadow is cheaper to keep than an animated box-shadow */
+  filter: drop-shadow(0 4px 10px rgba(2, 6, 23, 0.55));
+  transition: transform 160ms var(--mtn-ease-out);
+}
+.mtn-cluster__body svg {
+  position: absolute;
+  inset: 0;
+}
+/* Frosted centre disc behind the count */
+.mtn-cluster__body::before {
+  content: '';
+  position: absolute;
+  inset: 16%;
+  border-radius: 999px;
+  background: rgba(1, 20, 56, 0.88);
+  box-shadow: inset 0 0 0 1px rgba(255, 255, 255, 0.12);
+}
+.mtn-cluster__count {
+  position: relative;
+  font-family: var(--font-sans);
+  font-weight: 700;
+  color: #fff;
+  letter-spacing: -0.01em;
+  font-variant-numeric: tabular-nums;
+  line-height: 1;
+}
+.mtn-cluster:focus-visible .mtn-cluster__body {
+  box-shadow: 0 0 0 3px #ffb241;
+}
+.mtn-cluster:active .mtn-cluster__body {
+  transform: scale(0.96);
+}
+@media (hover: hover) and (pointer: fine) {
+  .mtn-cluster:hover .mtn-cluster__body {
+    transform: translateY(-2px) scale(1.06);
+  }
+}
+
+/* While picking a spot for "near me", clicks go to the map, not the markers */
+.mtn-picking .mtn-cluster {
+  pointer-events: none;
+}
+.mtn-picking .mapboxgl-canvas-container.mapboxgl-interactive {
+  cursor: crosshair;
+}
+
+/* --- Selected project: a fixed amber ring, plus two pulses when it is first
+   selected so the eye finds it. No infinite loop. CSS keeps it off the main thread. */
+.mtn-pulse {
+  position: relative;
+  width: 18px;
+  height: 18px;
+  pointer-events: none;
+}
+.mtn-pulse::before,
+.mtn-pulse::after {
+  content: '';
+  position: absolute;
+  inset: 0;
+  border-radius: 999px;
+  border: 2px solid #ffb241;
+}
+.mtn-pulse::after {
+  animation: mtn-pulse 1.2s var(--mtn-ease-out) 2 both;
+}
+@keyframes mtn-pulse {
+  from { opacity: 0.8; transform: scale(1); }
+  to { opacity: 0; transform: scale(2.6); }
+}
+
+/* --- "You are here" dot for near me ------------------------------------ */
+.mtn-you {
+  width: 16px;
+  height: 16px;
+  border-radius: 999px;
+  background: #3f7be0; /* navy-400 */
+  border: 3px solid #fff;
+  box-shadow: 0 0 0 5px rgba(63, 123, 224, 0.25);
+  pointer-events: none;
+}
+
+/* --- Panels: rise in once on mount -------------------------------------- */
+.mtn-rise {
+  animation: mtn-rise 240ms var(--mtn-ease-out) both;
+}
+@keyframes mtn-rise {
+  from { opacity: 0; transform: translateY(8px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+
+/* --- Reduced motion: keep fades, drop movement -------------------------- */
+@media (prefers-reduced-motion: reduce) {
+  .mtn-popup .mapboxgl-popup-content {
+    animation: mtn-fade 120ms ease;
+  }
+  .mtn-cluster__body {
+    transition: none;
+  }
+  .mtn-pulse::after {
+    animation: none;
+    opacity: 0;
+  }
+  .mtn-rise {
+    animation: mtn-fade 160ms ease both;
+  }
+}
+@keyframes mtn-fade {
+  from { opacity: 0; }
+  to { opacity: 1; }
+}
